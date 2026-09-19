@@ -446,10 +446,12 @@ todo lo aquí definido es Python, dentro de la estructura ya establecida.
 
 1. **Un archivo de config por agente vs una sección por agente en un único archivo** —
    mencionado en la sección 8, decisión de detalle para `/spec`.
-2. **Motor de reglas para políticas de fallo extensibles** (doc 11, punto diferido 3)
-   — sigue sin resolverse, ahora con una conexión adicional: la política de aprobación
-   de cambio de proveedor (sección 6 de este documento) podría beneficiarse del mismo
-   motor de reglas si se construye.
+2. **Motor de reglas para políticas de fallo extensibles** — RESUELTO en cuanto a
+   alcance y diseño, ver `docs/11-tech-stack.md` sección 12 (ABC `FailurePolicy`,
+   catálogo predefinido cerrado por ahora, escalable a custom después sin
+   reestructurar). La conexión con la política de aprobación de cambio de proveedor
+   (sección 6 de este documento) queda como posible punto de reuso futuro del mismo
+   mecanismo, no como pendiente de diseño.
 3. **Definición exacta del catálogo de categorías de memoria** (sección 2.2) — se
    estableció el mecanismo (categorías + búsqueda semántica), pero no el catálogo
    inicial concreto de categorías (p. ej. si "preferencias de comunicación" y "setup

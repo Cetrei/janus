@@ -223,6 +223,93 @@ gateway/`, extendiendo lo ya definido en doc 11): antes de instanciar cualquier
 Esto vive como lógica de `libs/reasoning-engine/` en coordinación con
 `libs/capabilities/` (Registro de Capacidades).
 
+### 4.3 Comunicación bidireccional entre Janus y subagentes: sesiones por tarea
+
+Cada agente (Janus incluido) expone un canal de comunicación bidireccional
+implementado como **sesión de chat**, reutilizando tal cual el mecanismo de
+persistencia de sesión que ya trae el motor de razonamiento extraído
+(`libs/reasoning-engine/`, ex-Hermes) — no se construye un sistema de mensajería
+interno nuevo (no-reinvención).
+
+**Modelo de sesión:**
+
+- **Una sesión es por tarea, no por agente en general.** Un agente (p. ej. Implementer)
+  puede tener múltiples sesiones simultáneas si tiene múltiples tareas activas — esto
+  coincide 1:1 con los slots de concurrencia definidos en la sección 7: cada slot
+  ocupado de un tipo de agente es, en la práctica, una sesión activa de ese tipo.
+- **Participante por defecto: Janus.** Toda sesión entre Janus y un subagente nace con
+  Janus como único participante del lado de Janus — es, en esencia, un chat 1:1
+  Janus↔subagente donde Janus manda instrucciones/tareas y el subagente responde.
+- **El canal externo (`channel-gateway`) por defecto solo conecta con la sesión de
+  Janus.** El usuario habla con Janus; Janus resume, sintetizando hitos relevantes (no
+  cada paso intermedio), lo que los subagentes están haciendo en sus propias sesiones.
+  El usuario puede consultarle a Janus el estado de cualquier subagente en cualquier
+  momento — es una consulta normal a Janus, vía su tool de estado/observabilidad
+  (conectada al doc 07), no un mecanismo especial.
+- **Modo avanzado — suscripción del usuario a una sesión puntual.** El usuario puede
+  suscribirse a la sesión de una tarea específica de un subagente (no a "todo lo que
+  ese agente haga en el futuro"). Suscribirse no crea una sesión nueva ni reinicia la
+  existente: agrega al usuario como participante adicional de la sesión Janus↔subagente
+  que ya está corriendo. Una vez suscripto, el usuario ve esa sesión en el canal
+  externo (con la identidad visual que corresponda según el modo fijado — bot propio o
+  prefijo compartido sobre el bot de Janus, ver sección 4.4) y **puede escribirle
+  directamente al subagente**, sin pasar por Janus. Esto no le da al subagente la tool
+  de orquestación (sección 4.1 no cambia) — solo habilita que el usuario participe
+  directamente de una conversación que ya existía.
+
+**Ciclo de vida de la sesión — cierre por conteo de oyentes:**
+
+- Una sesión no se cierra mientras tenga al menos un **oyente externo** (el usuario,
+  suscripto vía canal o interfaz). Janus es participante permanente de toda sesión de
+  subagente, pero **no cuenta para el umbral de cierre** — si contara, ninguna sesión
+  cerraría nunca, porque Janus nunca se retira de una sesión que él mismo abrió.
+- El cierre ocurre cuando el conteo de oyentes externos llega a 0 — esto es adicional
+  a "la tarea terminó": una tarea completada con el usuario todavía suscripto no se
+  cierra hasta que el usuario se desuscriba o cierre la vista, incluso si el subagente
+  ya entregó el resultado.
+- **Multiplicidad total, en ambos lados:** Janus puede tener N sesiones abiertas
+  simultáneamente (una por subagente/tarea activa); el usuario también puede tener N
+  suscripciones activas a la vez, accesibles tanto vía interfaz futura (doc 07) como
+  vía cualquier canal externo conectado (`channel-gateway`).
+
+Esto agrega una responsabilidad concreta, nueva respecto al doc 11, a
+`libs/reasoning-engine/` (o a una pieza dedicada, a decidir en `/spec`): **gestión de
+sesiones multi-participante con suscripción/desuscripción dinámica** — extensión sobre
+la sesión persistente simple que el motor extraído ya resuelve de fábrica.
+
+### 4.4 Identidad visual en canal: Janus por defecto, multi-bot opcional
+
+Verificado técnicamente contra la documentación de OpenClaw (base de `channel-
+gateway`): **es posible** que cada agente tenga identidad visual propia (nombre y
+avatar distintos) en un mismo servidor/grupo, vía dos mecanismos:
+
+1. **Un bot por agente (multi-token)** — cada agente registra su propia aplicación de
+   bot (Discord, Telegram, etc.), con su propio token, nombre y avatar reales. Es el
+   camino documentado y usado en producción por terceros, pero implica **trabajo
+   manual externo por cada agente** (registrar la aplicación en la plataforma
+   correspondiente) y tiene bugs activos conocidos y reportados en el proyecto base
+   (confusión de identidad entre bots por enrutamiento incorrecto, filtrado que
+   impide que los bots se vean entre sí) — no es una feature sin fricción.
+2. **Webhooks con username/avatar por mensaje** — un único bot, identidad custom por
+   mensaje vía webhook. Más liviano (no requiere N aplicaciones registradas), pero es
+   una capacidad en desarrollo sobre el proyecto base, no un camino maduro todavía.
+
+**Decisión de diseño:** el comportamiento por defecto es el descrito en 4.3 — Janus es
+la única identidad visual presente en el canal; los subagentes nunca postean mensajes
+propios sin que el usuario se haya suscripto explícitamente a su sesión. Cuando el
+usuario se suscribe (modo avanzado), la identidad visual del subagente en ese canal se
+rige por un campo de configuración en `AgentPersona`:
+
+```
+channel_identity: "own_bot" | "shared_with_prefix"
+```
+
+- `"own_bot"` — el agente tiene su propio bot registrado (mecanismo 1), asumiendo el
+  usuario el costo de registro y los matices de estabilidad conocidos arriba.
+- `"shared_with_prefix"` — el agente escribe sobre el bot de Janus, distinguido por un
+  prefijo de texto (p. ej. `[Implementer]: ...`), sin necesidad de registro adicional.
+  Este es razonable como default del modo avanzado, dado el menor costo operativo.
+
 ---
 
 ## 5. Voz: proveedor intercambiable por agente, con defaults propios
@@ -336,7 +423,9 @@ Este documento no introduce nuevas piezas de primer nivel en el monorepo — se 
 la estructura ya fijada en el doc 11, extendiendo responsabilidades:
 
 - `libs/reasoning-engine/` — gana la responsabilidad de ensamblado de toolset por
-  agente (sección 4.2) y la composición `AgentCore`/`AgentPersona` (sección 1.1).
+  agente (sección 4.2), la composición `AgentCore`/`AgentPersona` (sección 1.1), y la
+  gestión de sesiones multi-participante por tarea con suscripción/desuscripción
+  dinámica (sección 4.3).
 - `libs/capabilities/` — gana la lógica de cola/concurrencia por tipo de agente
   (sección 7) y la resolución de cambio dinámico de proveedor de modelo (sección 6).
 - `libs/persistence/` — gana el esquema de memoria de dos niveles (sección 2.2).
@@ -357,26 +446,25 @@ todo lo aquí definido es Python, dentro de la estructura ya establecida.
 
 1. **Un archivo de config por agente vs una sección por agente en un único archivo** —
    mencionado en la sección 8, decisión de detalle para `/spec`.
-2. **Multi-avatar/multi-identidad-visible en un mismo canal** (doc 11, punto diferido
-   2) — sigue sin resolverse; ahora es más relevante porque cada agente tiene
-   `AgentPersona` propia, lo cual hace más deseable (aunque no obligatorio) que esa
-   identidad se refleje visualmente en canales que lo soporten. Verificar contra
-   `channel-gateway` (fork de OpenClaw) en su `/spec`.
-3. **Motor de reglas para políticas de fallo extensibles** (doc 11, punto diferido 3)
+2. **Motor de reglas para políticas de fallo extensibles** (doc 11, punto diferido 3)
    — sigue sin resolverse, ahora con una conexión adicional: la política de aprobación
    de cambio de proveedor (sección 6 de este documento) podría beneficiarse del mismo
    motor de reglas si se construye.
-4. **Definición exacta del catálogo de categorías de memoria** (sección 2.2) — se
+3. **Definición exacta del catálogo de categorías de memoria** (sección 2.2) — se
    estableció el mecanismo (categorías + búsqueda semántica), pero no el catálogo
    inicial concreto de categorías (p. ej. si "preferencias de comunicación" y "setup
    técnico" son categorías separadas o una sola). Diferido a `/spec` de
    `libs/memory/`.
-5. **Esquema exacto de la tabla de solicitudes en cola** (sección 7.2) — el modelo
+4. **Esquema exacto de la tabla de solicitudes en cola** (sección 7.2) — el modelo
    conceptual (cola general + carriles por tipo + FIFO) está fijado; el esquema de
    persistencia/estructura de datos concreto se resuelve en `/spec`.
-6. **Alternativa al MCP de filesystem, si existe una superior** (sección 3.1) — se
+5. **Alternativa al MCP de filesystem, si existe una superior** (sección 3.1) — se
    dejó abierta la posibilidad de reemplazarlo por algo mejor evaluado más adelante;
    no se evaluó ninguna alternativa concreta en esta sesión.
+6. **Esquema exacto de persistencia de sesiones multi-participante** (sección 4.3) —
+   el modelo conceptual (sesión por tarea, suscripción dinámica, cierre por conteo de
+   oyentes externos) está fijado; la estructura de datos concreta (tabla de sesiones,
+   tabla de suscripciones) se resuelve en `/spec`.
 
 ---
 

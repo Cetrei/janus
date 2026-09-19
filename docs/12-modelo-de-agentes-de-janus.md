@@ -97,6 +97,17 @@ imita el mecanismo interno, se imita el resultado.
   y cualquier categoría que aplique transversalmente. Es la extensión natural de la
   Persistencia Transversal ya definida en el doc 06.
 
+### 2.2.1 Catálogo de categorías: auto-extensible, con `profile` como semilla
+
+El catálogo de categorías de memoria **no es fijo ni definido de antemano por
+Janus** — cada agente puede crear categorías nuevas según lo que necesite recordar,
+en vez de estar limitado a una lista predefinida. La única categoría garantizada en
+todo agente, presente de fábrica, es **`profile`**: información sobre quién es el
+usuario (nombre, contexto personal relevante, lo que cualquier agente necesita saber
+para tratarlo bien desde el primer turno — por ejemplo, quién es Joanfer). El resto
+del catálogo emerge orgánicamente según lo que cada agente decida que vale la pena
+recordar, sin taxonomía rígida impuesta por la infraestructura.
+
 ### 2.3 Mecanismo: búsqueda semántica dentro de SQLite
 
 La recuperación es por similitud semántica, no por clave exacta — esto es RAG
@@ -123,6 +134,59 @@ diferencia de la tool de orquestación que es exclusiva de Janus.
 
 Vive en `libs/persistence/` (extensión del módulo ya definido en doc 11) más una nueva
 pieza `libs/memory/` para la lógica de categorización y búsqueda semántica.
+
+### 2.5 Indexación de identidad de agente y de proyectos del usuario — distinta de la memoria episódica
+
+Esta es una segunda forma de indexación, con un propósito distinto al de la memoria
+episódica de las secciones 2.1-2.4: no es "lo que el agente aprendió/recordó con el
+tiempo", es **"lo que el agente es"** — el propio cuerpo de archivos que define su
+identidad (`Implementer/skills/`, `Implementer/instructions/`, `Implementer/rules/`,
+`Implementer/tools/`, etc., según la topología de carpetas obligatoria fijada en la
+sección 3.1.1), siempre disponible, no algo recuperado por similitud a un hecho
+aprendido sino navegado para saber qué capacidades tiene el agente y cómo usarlas.
+
+**Motivación — cómo un modelo con filesystem gana capacidades de harness avanzado.**
+Cada agente tiene típicamente un modelo en la nube, sin acceso nativo al disco del
+host. Para que ese modelo entienda rápido quién es y qué puede hacer, la forma más
+eficaz no es cargar todo en RAM (desperdicia contexto, no escala si el agente tiene
+muchos skills/reglas), ni navegación simple archivo por archivo (lento, y el modelo
+puede confundirse — problema real observado con el filesystem MCP oficial, ver sección
+3.1), ni una base de datos genérica sin estructura de búsqueda: es un **índice híbrido
+precomputado** (BM25 + vectorial) sobre esos archivos, consultado con búsqueda rápida
+en cada turno para traer solo lo relevante al mensaje actual.
+
+**Reutilizado de Hermes, no construido desde cero.** Verificado que Hermes ya resuelve
+esto en tres capas relacionadas, todas coherentes con el criterio de bajo consumo /
+sin dependencias externas ya fijado para Janus:
+
+- **Knowledgebase RAG (`qmd`)** — indexa directorios de documentos en un único archivo
+  SQLite por directorio indexado, combinando BM25 (vía FTS5 de SQLite) + búsqueda
+  vectorial + reranking. Zero-server, embeddings locales por defecto (`fastembed`, sin
+  Ollama ni API key).
+- **Semantic Codebase Search** — indexación de código fuente vía Tree-sitter (parsing
+  real de sintaxis) + embeddings, para preguntas conceptuales sobre código.
+- **Hybrid Tool Pre-Selection** — en vez de inyectar todas las tools disponibles en
+  cada prompt, precomputa un índice de tools (BM25 + vectorial) y hace búsqueda
+  híbrida rápida (<50ms) por turno para inyectar solo las top-K tools relevantes al
+  mensaje del usuario.
+
+Este mecanismo completo se extrae junto con el resto del motor de razonamiento (doc
+11, sección 6.1, ampliada) hacia `libs/reasoning-engine/` — no se construye aparte en
+el fork de filesystem, y no se mezcla con `sqlite-vec` de memoria episódica.
+
+**Dos usos del mismo mecanismo, mismo código, distinto directorio objetivo:**
+
+- **Identidad de agente (activado por defecto, no opt-in)** — indexa la carpeta de
+  identidad del propio agente. Se reconstruye cuando la config del agente cambia
+  (conectado al hot-reload condicional de la sección 3.3: si cambian skills/reglas,
+  se reindexa).
+- **Proyectos del usuario (opt-in, por proyecto)** — cuando el usuario lo activa,
+  indexa un proyecto suyo para navegación/búsqueda rápida por parte de un agente,
+  usando el mismo mecanismo apuntado a esa carpeta.
+
+El índice vive como un archivo SQLite propio por directorio indexado (coherente con el
+criterio "single file, trivially portable" que Hermes ya valida), separado de
+`sqlite-vec` (memoria episódica) y de la base principal de `libs/persistence/`.
 
 ---
 

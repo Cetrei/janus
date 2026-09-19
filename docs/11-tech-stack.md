@@ -76,8 +76,12 @@ apps/
 libs/                      # Python
   reasoning-engine/        # Extracción quirúrgica + refactor del motor de Hermes:
                             # bucle de tool-calling, parsing de function-calls,
-                            # routing multi-proveedor de modelos. NO incluye CLI,
-                            # dashboard, ni sistema de mensajería de Hermes.
+                            # routing multi-proveedor de modelos, e indexación
+                            # híbrida (BM25 + vectorial, estilo qmd de Hermes) usada
+                            # tanto para identidad de agente como para proyectos del
+                            # usuario y pre-selección de tools (ver doc 12, sección 2.5
+                            # y sección 4.2). NO incluye CLI, dashboard, ni sistema de
+                            # mensajería de Hermes.
   capabilities/            # Registro de Capacidades. Importado directo por
                             # core-gateway, sin servidor propio.
   persistence/             # Persistencia Transversal: acceso a SQLite vía
@@ -103,6 +107,13 @@ crates/                    # Rust
                             # posible OCR/visión. Expuesto a Python vía PyO3.
                             # Abstrae por SO (Linux vía X11/Wayland es la
                             # prioridad real dado el target de Raspberry Pi).
+  filesystem-mcp/          # Fork de filesystem-mcp-rs (port en Rust del filesystem
+                            # MCP oficial), extendido con delete_path recursivo,
+                            # bulk_edits, grep_files (regex) y edit_file con
+                            # diff+dry-run. Sin indexación propia — la indexación
+                            # vive en libs/reasoning-engine/ (ver doc 12, sección
+                            # 2.5). Reemplaza al MCP de filesystem oficial en toda
+                            # referencia de este documento y del doc 12.
 
 packages/                  # TypeScript
   channel-gateway-core/    # Fork COMPLETO de OpenClaw (no extracción quirúrgica).
@@ -565,7 +576,19 @@ ser relativamente aislado del resto del núcleo.
 
 ---
 
-## 14. Explícitamente diferido (no decidido en este documento)
+## 14. Licencia
+
+Decisión confirmada: **código abierto, licencia MIT**, con aviso de copyright a nombre
+de Joanfer como creador (`Copyright (c) 2026 Joanfer` en el archivo `LICENSE` de la
+raíz del monorepo). MIT exige que ese aviso se preserve en cualquier copia o
+redistribución —incluido cualquier fork futuro que terceros hagan de Janus—, lo cual
+es el mecanismo legal concreto que garantiza la atribución de autoría. Coherente con
+la licencia MIT de Hermes (doc 11, sección 6.1), que ya permitía esta elección sin
+restricción.
+
+---
+
+## 15. Explícitamente diferido (no decidido en este documento)
 
 Estos puntos surgieron durante la discusión de tech-stack pero se marcaron
 explícitamente como fuera de alcance de este documento, para no contaminar el stack ya
@@ -578,18 +601,18 @@ maduro con decisiones apresuradas:
 3. **Motor de reglas para políticas de fallo extensibles/ejecutables** — RESUELTO en
    cuanto a alcance de v1 y diseño escalable, ver sección 12 de este documento (ABC
    `FailurePolicy`, catálogo cerrado por ahora).
-4. **Licencia del propio código de Janus** (abierto o privado) — MIT de Hermes lo
-   permite en cualquier caso, pero la elección en sí no se tomó en esta sesión.
-5. **Nombre final del archivo de config** — se usó `config/janus.toml` a lo largo de
-   este documento por consistencia con la decisión de formato (sección 7), pero no se
-   confirmó explícitamente ese nombre de archivo contra el usuario.
+4. **Nombre final del archivo de config** — se usó `config/janus.toml` a lo largo de
+   este documento por consistencia con la decisión de formato (sección 7); nombre
+   CONFIRMADO explícitamente por el usuario.
 
-El punto de mantenimiento del fork de Hermes frente a upstream, que figuraba aquí
-como diferido, también quedó resuelto: ver sección 6.4.
+El punto de licencia, que figuraba aquí como diferido, también quedó resuelto: ver
+sección 14. El punto de mantenimiento del fork de Hermes frente a upstream quedó
+resuelto en la sección 6.4. La alternativa al MCP de filesystem oficial quedó
+resuelta con el fork de `filesystem-mcp-rs` en `crates/filesystem-mcp/` (sección 3).
 
 ---
 
-## 15. Documentos relacionados
+## 16. Documentos relacionados
 
 - `00-vision-y-alcance.md` — visión general, alcance funcional.
 - `02-arquitectura-estrella-y-contrato-de-integracion.md` — Principios Arquitectónicos

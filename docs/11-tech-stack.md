@@ -491,26 +491,57 @@ Vive en `libs/observability/`.
 
 ---
 
-## 12. Políticas de fallo: declarativas por defecto, extensibles a futuro
+## 12. Políticas de fallo: catálogo rico predefinido, diseñado para escalar a custom
 
 Estilo de nomenclatura tomado explícitamente de Docker (`restart: on-failure`,
 `restart: always`, `restart: never`) por ser un vocabulario ya conocido y fácil de
 razonar. Declaradas en `config/janus.toml`, con default global y override por
-harness/spoke:
+harness/spoke.
+
+### 12.1 Alcance de v1: catálogo rico, sin motor de reglas custom
+
+Resuelto explícitamente: se descartó construir un motor de reglas con lenguaje propio
+o código custom ejecutable por el usuario (evaluado y pospuesto por complejidad no
+justificada aún — riesgo de sandboxing, validación de código arbitrario). En su lugar,
+v1 ofrece un **catálogo ampliado de políticas predefinidas, combinables**, declaradas
+por nombre:
 
 ```toml
 [harnesses.channel-gateway]
-port = 8090
-timeout_ms = 5000
-retry_policy = "on-failure"
-max_retries = 3
+retry_policy = "exponential-backoff"
+max_retries = 5
+backoff_base_ms = 500
+circuit_breaker_threshold = 3      # abre el circuito tras N fallos seguidos
+circuit_breaker_cooldown_s = 300   # tiempo antes de reintentar tras abrir circuito
 ```
 
-**Extensión futura marcada explícitamente como pendiente de spec, no de tech-stack**:
-el usuario planteó la posibilidad de una "extensión propia para definir la política de
-los componentes" — es decir, políticas de fallo no solo declarativas sino
-*ejecutables* (un motor de reglas o callbacks registrables). Esto es una decisión de
-diseño del Core de Traducción, a resolver en la fase de `/spec`, no aquí.
+### 12.2 Diseño interno: ABC `FailurePolicy`, para no cerrar la puerta a custom después
+
+La clave de diseño, fijada explícitamente aunque no se implemente custom todavía: toda
+política de fallo, incluso las predefinidas de v1, se invoca siempre a través de una
+misma interfaz — nunca inline en el código que maneja reintentos:
+
+```python
+class FailurePolicy(ABC):
+    @abstractmethod
+    def should_retry(self, failure_history: list[FailureEvent]) -> RetryDecision: ...
+
+class OnFailurePolicy(FailurePolicy): ...
+class ExponentialBackoffPolicy(FailurePolicy): ...
+class CircuitBreakerPolicy(FailurePolicy): ...
+```
+
+Hoy el catálogo de implementaciones es **cerrado** (solo las que Janus mismo
+implementa); no existe mecanismo de carga de políticas custom desde afuera. El día que
+se decida soportarlo, la extensión es agregar una nueva implementación de
+`FailurePolicy` (posiblemente cargada dinámicamente desde un archivo que el usuario
+provea) — no hace falta rediseñar el mecanismo de resolución de política, el
+ensamblado de toolset, ni la estructura central de `libs/capabilities/`. Esto es lo
+único que se fija ahora para que el diseño escale sin comprometer nada de la
+implementación actual.
+
+Vive en `libs/capabilities/` (Registro de Capacidades), coherente con el resto de la
+lógica de resolución/selección ya definida ahí.
 
 ---
 
@@ -540,20 +571,13 @@ Estos puntos surgieron durante la discusión de tech-stack pero se marcaron
 explícitamente como fuera de alcance de este documento, para no contaminar el stack ya
 maduro con decisiones apresuradas:
 
-1. **Sistema agéntico completo de Janus** — skills, comandos, reglas de comportamiento
-   propias (más allá de lo extraído de Hermes), personalidades/voces por agente,
-   cambio dinámico de modelo/proveedor por agente configurado globalmente, agentes
-   personalizables por el usuario. Esto es una pieza arquitectónica nueva, del tamaño
-   de un documento propio (candidato a `docs/12-modelo-de-agentes-de-janus.md`), a
-   discutir en una sesión de `/discuss` dedicada antes de bajarla a spec.
-2. **Multi-avatar/multi-identidad-visible en un mismo canal de Discord/WhatsApp**
-   (varios bots con nombre y avatar propios posteando en un mismo grupo, a diferencia
-   de un solo bot con prefijo de texto por agente). No verificado técnicamente contra
-   OpenClaw todavía; queda como pregunta abierta a resolver cuando se especifique
-   `channel-gateway` en detalle.
-3. **Motor de reglas para políticas de fallo extensibles/ejecutables** (más allá de las
-   políticas declarativas estilo Docker de la sección 12) — decisión de diseño del
-   Core de Traducción, a resolver en `/spec`.
+1. **Sistema agéntico completo de Janus** — RESUELTO, ver `docs/12-modelo-de-agentes-
+   de-janus.md`.
+2. **Multi-avatar/multi-identidad-visible en un mismo canal** — RESUELTO, ver doc 12,
+   secciones 4.3 y 4.4.
+3. **Motor de reglas para políticas de fallo extensibles/ejecutables** — RESUELTO en
+   cuanto a alcance de v1 y diseño escalable, ver sección 12 de este documento (ABC
+   `FailurePolicy`, catálogo cerrado por ahora).
 4. **Licencia del propio código de Janus** (abierto o privado) — MIT de Hermes lo
    permite en cualquier caso, pero la elección en sí no se tomó en esta sesión.
 5. **Nombre final del archivo de config** — se usó `config/janus.toml` a lo largo de
@@ -561,7 +585,7 @@ maduro con decisiones apresuradas:
    confirmó explícitamente ese nombre de archivo contra el usuario.
 
 El punto de mantenimiento del fork de Hermes frente a upstream, que figuraba aquí
-como diferido, quedó resuelto: ver sección 6.4.
+como diferido, también quedó resuelto: ver sección 6.4.
 
 ---
 

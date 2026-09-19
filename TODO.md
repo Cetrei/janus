@@ -20,20 +20,21 @@ condicional), orquestación exclusiva de Janus por ensamblado de toolset, voz co
 proveedor intercambiable (Kokoro/Whisper de default), cambio dinámico de modelo vía
 tool call, y concurrencia con cola FIFO por tipo de agente (Janus exento).
 
-### 1.2 Multi-avatar / multi-identidad-visible en un mismo canal
-¿Puede `channel-gateway` (fork de OpenClaw) sostener varios bots con nombre y avatar
-propios posteando en un mismo grupo de Discord/WhatsApp, o el tope real es un solo bot
-con prefijo de texto por agente? No verificado técnicamente todavía. Ahora más
-relevante que antes: cada agente tiene `AgentPersona` propia (doc 12), lo cual hace
-deseable (no obligatorio) que esa identidad se refleje visualmente en canales que lo
-soporten. Verificar en el `/spec` de `channel-gateway`.
+### 1.2 ~~Multi-avatar / multi-identidad-visible en un mismo canal~~ — RESUELTO
+Ver `docs/12-modelo-de-agentes-de-janus.md`, secciones 4.3 y 4.4. Comportamiento por
+defecto: Janus es la única identidad visual del canal, resume el trabajo de los
+subagentes, y el usuario puede suscribirse a la sesión (por tarea) de un subagente
+puntual para hablarle directo. Identidad visual del subagente en modo avanzado
+configurable por agente (`channel_identity: "own_bot" | "shared_with_prefix"`).
+Verificado técnicamente contra OpenClaw: soportado vía multi-token (con bugs
+conocidos) o webhooks (aún no maduro).
 
-### 1.3 Motor de reglas para políticas de fallo extensibles
-Más allá de las políticas declarativas estilo Docker ya fijadas (doc 11 sección 12):
-¿se construye un motor de reglas/callbacks registrables para que el usuario defina
-políticas de fallo custom por componente? Decisión de diseño del Core de Traducción.
-Conexión nueva (doc 12): la política de aprobación de cambio de proveedor de modelo
-(ask_everytime/allow_always) podría beneficiarse del mismo motor si se construye.
+### 1.3 ~~Motor de reglas para políticas de fallo extensibles~~ — RESUELTO
+Ver `docs/11-tech-stack.md` sección 12. Alcance de v1: catálogo rico predefinido de
+políticas (on-failure, exponential-backoff, circuit-breaker) declaradas por nombre en
+`config/janus.toml`, sin motor de reglas custom todavía. Diseño interno con ABC
+`FailurePolicy` para que agregar políticas custom en el futuro no requiera
+reestructurar `libs/capabilities/`.
 
 ### 1.4 Descubrimiento y arbitraje — flecos menores
 - Confirmar el nombre final del archivo de config (se usó `config/janus.toml` como

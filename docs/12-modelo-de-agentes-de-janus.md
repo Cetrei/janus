@@ -202,6 +202,29 @@ nivel de skill/comando y no solo a nivel de "tipo de tarea" genérico.
 
 ### 3.1 Config de agente: legible, editable por humano, IA o interfaz
 
+#### 3.1.1 Topología de carpetas obligatoria: filesystem como harness
+
+Cada agente vive en su propia carpeta, siguiendo una topología **obligatoria**, sin
+excepciones — esta estructura es lo que permite que incluso un modelo simple, con solo
+acceso a filesystem, alcance capacidades de harness avanzado (el mismo principio que
+agent-roles ya demuestra):
+
+```
+Implementer/
+  Skills/
+  Instructions/
+  Rules/
+  Tools/
+  agent.md
+  agent.toml
+```
+
+`agent.toml` es la config validada por Pydantic (ver 3.2); `agent.md` es la
+descripción legible de identidad/propósito del agente; `Skills/`, `Instructions/`,
+`Rules/`, `Tools/` contienen los `.md` correspondientes a cada categoría, que el
+agente indexa y navega vía el mecanismo de la sección 2.5. Cada agente es un folder;
+no hay excepciones a esta convención para agentes nuevos que el usuario defina.
+
 Cada agente tiene un archivo de configuración legible por humano (TOML, consistente
 con el resto del stack fijado en doc 11 sección 7) donde se declaran: reglas, voz,
 skills habilitados, comandos habilitados, proveedor de modelo, y cualquier otro
@@ -210,10 +233,16 @@ parámetro de `AgentCore`/`AgentPersona`.
 Esta config es editable por tres vías, todas igualmente válidas:
 1. El usuario, directamente, editando el archivo.
 2. La propia IA (cualquier agente, típicamente Janus), a través de una herramienta ya
-   existente en vez de construir un mecanismo de escritura propio (no-reinvención): el
-   **MCP de filesystem** (o una alternativa superior si se evalúa y se decide
-   reemplazarlo), acompañado de un **skill que documenta cómo usarla correctamente**
-   para este propósito específico.
+   existente en vez de construir un mecanismo de escritura propio (no-reinvención):
+   **`crates/filesystem-mcp/`** (fork de `filesystem-mcp-rs`, ver doc 11 sección 3 —
+   elegido sobre el MCP de filesystem oficial porque este último carece de
+   eliminación de archivos, tiene búsqueda de patrones limitada, y no resuelve
+   indexación; el fork agrega `delete_path` recursivo, `bulk_edits` y `grep_files`
+   con regex), acompañado de un **skill obligatorio que documenta cómo usarla
+   correctamente** — la mitigación directa al problema observado de que un modelo
+   puede confundirse con su propio sistema de edición de archivos si solo cuenta con
+   las tools, sin ejemplos concretos de uso (orden típico de llamadas, cuándo usar
+   `edit_file` vs `bulk_edits`, ejemplo de dry-run antes de aplicar).
 3. Una interfaz futura (doc 07).
 
 ### 3.2 Validación como barrera obligatoria, sin excepción por vía de escritura
@@ -483,54 +512,62 @@ coordinación con `apps/core-gateway/` para el despacho efectivo de instancias d
 
 ## 8. Resumen de nuevas piezas de código respecto al doc 11
 
-Este documento no introduce nuevas piezas de primer nivel en el monorepo — se apoya en
-la estructura ya fijada en el doc 11, extendiendo responsabilidades:
+Este documento no introduce nuevas piezas de primer nivel en el monorepo más allá del
+fork de filesystem ya incorporado al doc 11 — se apoya en la estructura ya fijada ahí,
+extendiendo responsabilidades:
 
 - `libs/reasoning-engine/` — gana la responsabilidad de ensamblado de toolset por
-  agente (sección 4.2), la composición `AgentCore`/`AgentPersona` (sección 1.1), y la
+  agente (sección 4.2), la composición `AgentCore`/`AgentPersona` (sección 1.1), la
   gestión de sesiones multi-participante por tarea con suscripción/desuscripción
-  dinámica (sección 4.3).
+  dinámica (sección 4.3), y el mecanismo de indexación híbrida (BM25 + vectorial,
+  extraído de Hermes: `qmd`, Semantic Codebase Search, Hybrid Tool Pre-Selection) para
+  identidad de agente y proyectos del usuario (sección 2.5).
 - `libs/capabilities/` — gana la lógica de cola/concurrencia por tipo de agente
   (sección 7) y la resolución de cambio dinámico de proveedor de modelo (sección 6).
 - `libs/persistence/` — gana el esquema de memoria de dos niveles (sección 2.2).
-- `libs/memory/` (nueva) — lógica de categorización y búsqueda semántica sobre
-  `sqlite-vec` (sección 2.3-2.4).
+- `libs/memory/` (nueva) — lógica de categorización auto-extensible (sección 2.2.1,
+  catálogo `profile` como semilla) y búsqueda semántica sobre `sqlite-vec` (sección
+  2.3-2.4).
 - `libs/config/` — gana los schemas Pydantic de `AgentCore`/`AgentPersona` con la
-  marca `requires_restart` por campo (sección 3.3).
-- `config/` — gana un archivo de configuración por agente (además de
-  `config/janus.toml`), o una sección por agente dentro del mismo archivo — **decisión
-  de detalle diferida a `/spec`**.
+  marca `requires_restart` por campo (sección 3.3), y el schema de la topología de
+  carpetas obligatoria por agente (sección 3.1.1).
+- `crates/filesystem-mcp/` (doc 11, sección 3) — usado por todo agente vía
+  `agent.toml`/escritura de config (sección 3.1), sin indexación propia — esa
+  responsabilidad vive en `libs/reasoning-engine/` (sección 2.5).
+- `config/` — cada agente es un folder con su propia topología obligatoria (sección
+  3.1.1: `agent.toml` + `agent.md` + `Skills/`/`Instructions/`/`Rules/`/`Tools/`) en
+  vez de un archivo único o una sección dentro de `config/janus.toml` — **decisión de
+  ubicación exacta de esos folders dentro del monorepo (p. ej. `config/agents/` vs
+  otra raíz) diferida a `/spec`**.
 
 No se introduce ninguna dependencia nueva de lenguaje o runtime respecto al doc 11:
-todo lo aquí definido es Python, dentro de la estructura ya establecida.
+todo lo aquí definido es Python (más el fork en Rust de filesystem ya incorporado al
+doc 11), dentro de la estructura ya establecida.
 
 ---
 
 ## 9. Explícitamente diferido (no decidido en este documento)
 
-1. **Un archivo de config por agente vs una sección por agente en un único archivo** —
-   mencionado en la sección 8, decisión de detalle para `/spec`.
-2. **Motor de reglas para políticas de fallo extensibles** — RESUELTO en cuanto a
-   alcance y diseño, ver `docs/11-tech-stack.md` sección 12 (ABC `FailurePolicy`,
-   catálogo predefinido cerrado por ahora, escalable a custom después sin
-   reestructurar). La conexión con la política de aprobación de cambio de proveedor
-   (sección 6 de este documento) queda como posible punto de reuso futuro del mismo
-   mecanismo, no como pendiente de diseño.
-3. **Definición exacta del catálogo de categorías de memoria** (sección 2.2) — se
-   estableció el mecanismo (categorías + búsqueda semántica), pero no el catálogo
-   inicial concreto de categorías (p. ej. si "preferencias de comunicación" y "setup
-   técnico" son categorías separadas o una sola). Diferido a `/spec` de
-   `libs/memory/`.
-4. **Esquema exacto de la tabla de solicitudes en cola** (sección 7.2) — el modelo
+1. **Ubicación exacta de los folders de agente dentro del monorepo** (p. ej.
+   `config/agents/<nombre>/` vs otra raíz) — la topología interna de cada folder
+   (sección 3.1.1) está fijada y es obligatoria; dónde vive esa colección de folders
+   se resuelve en `/spec`.
+2. **Definición exacta del catálogo INICIAL de categorías de memoria más allá de
+   `profile`** (sección 2.2.1) — el mecanismo es auto-extensible por diseño; no hace
+   falta catálogo cerrado, pero si en `/spec` conviene sembrar alguna categoría
+   adicional de fábrica además de `profile`, se decide ahí.
+3. **Esquema exacto de la tabla de solicitudes en cola** (sección 7.2) — el modelo
    conceptual (cola general + carriles por tipo + FIFO) está fijado; el esquema de
    persistencia/estructura de datos concreto se resuelve en `/spec`.
-5. **Alternativa al MCP de filesystem, si existe una superior** (sección 3.1) — se
-   dejó abierta la posibilidad de reemplazarlo por algo mejor evaluado más adelante;
-   no se evaluó ninguna alternativa concreta en esta sesión.
-6. **Esquema exacto de persistencia de sesiones multi-participante** (sección 4.3) —
+4. **Esquema exacto de persistencia de sesiones multi-participante** (sección 4.3) —
    el modelo conceptual (sesión por tarea, suscripción dinámica, cierre por conteo de
    oyentes externos) está fijado; la estructura de datos concreta (tabla de sesiones,
    tabla de suscripciones) se resuelve en `/spec`.
+
+Los puntos de motor de reglas de políticas de fallo, y de alternativa al MCP de
+filesystem oficial, que figuraban aquí como diferidos, quedaron resueltos: ver doc 11
+sección 12 y sección 3.1 de este documento (`crates/filesystem-mcp/`),
+respectivamente.
 
 ---
 

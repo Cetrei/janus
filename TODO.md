@@ -1,7 +1,8 @@
 # TODO — Janus
 
-Estado del proyecto: arquitectura pura (docs 00-10) + tech-stack (doc 11) + modelo de
-agentes (doc 12) cerrados, incluyendo todos los flecos de discusión menores. Este
+Estado del proyecto: arquitectura pura (`docs/architecture/`) + tech-stack
+(`docs/stack/`) + modelo de agentes (`docs/agents/`) cerrados, incluyendo todos los
+flecos de discusión menores. Este
 archivo es la lista viva de lo que falta antes de poder implementar. Se actualiza a
 medida que cada punto se resuelve (vía `/discuss`, `/adr` o `/spec`).
 
@@ -13,7 +14,7 @@ por componente → kanban (GitHub Projects u otra app) → implementación.**
 ## 1. Discusiones de arquitectura — TODAS RESUELTAS
 
 ### 1.1 ~~Sistema agéntico completo de Janus~~ — RESUELTO
-Ver `docs/12-modelo-de-agentes-de-janus.md`. Cubre: composición AgentCore/AgentPersona,
+Ver `docs/agents/`. Cubre: composición AgentCore/AgentPersona,
 memoria de dos niveles con búsqueda semántica, skills/comandos compartidos con
 delegación por especialidad, config por agente (TOML + Pydantic + hot-reload
 condicional), orquestación exclusiva de Janus por ensamblado de toolset, voz con
@@ -21,7 +22,7 @@ proveedor intercambiable (Kokoro/Whisper de default), cambio dinámico de modelo
 tool call, y concurrencia con cola FIFO por tipo de agente (Janus exento).
 
 ### 1.2 ~~Multi-avatar / multi-identidad-visible en un mismo canal~~ — RESUELTO
-Ver `docs/12-modelo-de-agentes-de-janus.md`, secciones 4.3 y 4.4. Comportamiento por
+Ver `docs/agents/04-orquestacion-y-sesiones.md`, secciones 3 y 4. Comportamiento por
 defecto: Janus es la única identidad visual del canal, resume el trabajo de los
 subagentes, y el usuario puede suscribirse a la sesión (por tarea) de un subagente
 puntual para hablarle directo. Identidad visual del subagente en modo avanzado
@@ -30,7 +31,7 @@ Verificado técnicamente contra OpenClaw: soportado vía multi-token (con bugs
 conocidos) o webhooks (aún no maduro).
 
 ### 1.3 ~~Motor de reglas para políticas de fallo extensibles~~ — RESUELTO
-Ver `docs/11-tech-stack.md` sección 12. Alcance de v1: catálogo rico predefinido de
+Ver `docs/stack/09-politicas-de-fallo.md`. Alcance de v1: catálogo rico predefinido de
 políticas (on-failure, exponential-backoff, circuit-breaker) declaradas por nombre en
 `config/janus.toml`, sin motor de reglas custom todavía. Diseño interno con ABC
 `FailurePolicy` para que agregar políticas custom en el futuro no requiera
@@ -39,28 +40,28 @@ reestructurar `libs/capabilities/`.
 ### 1.4 ~~Descubrimiento y arbitraje — flecos menores~~ — RESUELTO
 - Nombre del archivo de config: **confirmado** `config/janus.toml`.
 - Licencia: **confirmada** — código abierto, MIT, copyright a nombre de Joanfer. Ver
-  `docs/11-tech-stack.md` sección 14.
+  `docs/stack/10-gui-automation-y-licencia.md`, sección 2.
 
-### 1.5 ~~Nuevos flecos abiertos por el doc 12~~ — RESUELTO
+### 1.5 ~~Nuevos flecos abiertos por el modelo de agentes~~ — RESUELTO
 - Config por agente: **resuelto** — cada agente es un folder con topología
   obligatoria (`Skills/`, `Instructions/`, `Rules/`, `Tools/`, `agent.md`,
-  `agent.toml`). Ver doc 12, sección 3.1.1. Pendiente solo la ubicación exacta de
+  `agent.toml`). Ver `docs/agents/03-skills-y-config.md`, sección 2.1. Pendiente solo la ubicación exacta de
   esos folders dentro del monorepo (ver sección 1.6 abajo).
 - Categorías de memoria: **resuelto** — catálogo auto-extensible, cada agente crea
-  las que necesita; única categoría de fábrica garantizada es `profile`. Ver doc 12,
-  sección 2.2.1.
+  las que necesita; única categoría de fábrica garantizada es `profile`. Ver
+  `docs/agents/02-memoria.md`, sección 2.1.
 - Alternativa al MCP de filesystem: **resuelto** — fork de `filesystem-mcp-rs` en
   `crates/filesystem-mcp/`, con `delete_path` recursivo, `bulk_edits`, `grep_files`
-  regex. Ver doc 11, sección 3, y doc 12, sección 3.1.
+  regex. Ver `docs/stack/02-monorepo.md` y `docs/agents/03-skills-y-config.md`, sección 2.
 
 ### 1.6 Nuevos flecos menores abiertos en esta última ronda (indexación + filesystem)
 Todos son detalle de `/spec`, ninguno bloquea el paso a ADRs:
 - Ubicación exacta de los folders de agente dentro del monorepo (p. ej.
-  `config/agents/<nombre>/` vs otra raíz). Ver doc 12, sección 9, punto 1.
+  `config/agents/<nombre>/` vs otra raíz). Ver `docs/agents/08-impacto-en-monorepo-y-diferido.md`, sección 2, punto 1.
 - Catálogo inicial de categorías de memoria más allá de `profile`, si conviene
-  sembrar alguna de fábrica. Ver doc 12, sección 9, punto 2.
-- Esquema exacto de la tabla de solicitudes en cola (doc 12, sección 7.2).
-- Esquema exacto de persistencia de sesiones multi-participante (doc 12, sección 4.3).
+  sembrar alguna de fábrica. Ver `docs/agents/08-impacto-en-monorepo-y-diferido.md`, sección 2, punto 2.
+- Esquema exacto de la tabla de solicitudes en cola (`docs/agents/07-concurrencia.md`, sección 2).
+- Esquema exacto de persistencia de sesiones multi-participante (`docs/agents/04-orquestacion-y-sesiones.md`, sección 3).
 
 ---
 
@@ -86,7 +87,7 @@ futura:
       (vs dataclasses a mano por lenguaje)
 - [ ] **ADR — Hermes: extracción quirúrgica + refactor, no servicio externo ni fork
       completo** (la decisión más grande de esta ronda; documentar las tres opciones
-      evaluadas de doc 11 sección "dilema" y por qué se descartaron A y B)
+      evaluadas (ver `docs/stack/05-harnesses-hermes-openclaw.md`, sección 1) y por qué se descartaron A y B)
 - [ ] **ADR — OpenClaw: fork completo, no extracción quirúrgica**
       (criterio de corte opuesto al de Hermes, y por qué)
 - [ ] **ADR — División de responsabilidades voz/canales/razonamiento**
@@ -99,35 +100,35 @@ futura:
 - [ ] **ADR — Sistema de tokens scopeados propio, en vez de asumir confianza por
       localhost**
 - [ ] **ADR — GUI automation dividida Rust (bajo nivel) + Python (orquestación)**
-- [ ] **ADR — Composición AgentCore/AgentPersona, no herencia** (doc 12, sección 1.1)
+- [ ] **ADR — Composición AgentCore/AgentPersona, no herencia** (`docs/agents/01-modelo-de-agente.md`, sección 2)
 - [ ] **ADR — Orquestación exclusiva de Janus por ensamblado de toolset**, no por
-      permisos en runtime (doc 12, sección 4.1) — vale la pena documentar bien el
+      permisos en runtime (`docs/agents/04-orquestacion-y-sesiones.md`, sección 1) — vale la pena documentar bien el
       razonamiento de seguridad detrás de esto.
 - [ ] **ADR — Memoria por categorías, auto-extensible, con búsqueda semántica vía
-      `sqlite-vec`** (doc 12, secciones 2.2.1 y 2.3), en vez de una base vectorial
+      `sqlite-vec`** (`docs/agents/02-memoria.md`, secciones 2.1 y 3), en vez de una base vectorial
       dedicada aparte o un catálogo cerrado de categorías.
 - [ ] **ADR — Kokoro + Whisper/faster-whisper como defaults de voz**, con
-      intercambiabilidad por agente (doc 12, sección 5)
+      intercambiabilidad por agente (`docs/agents/05-voz.md`)
 - [ ] **ADR — Concurrencia: tope solo por número de agentes (no por recursos), cola
-      FIFO por carriles de tipo, Janus exento** (doc 12, sección 7)
+      FIFO por carriles de tipo, Janus exento** (`docs/agents/07-concurrencia.md`)
 - [ ] **ADR — Sesiones multi-participante por tarea, reutilizando el mecanismo de
       sesión de Hermes**, con suscripción/desuscripción dinámica y cierre por conteo
-      de oyentes externos (Janus nunca cuenta) (doc 12, sección 4.3)
+      de oyentes externos (Janus nunca cuenta) (`docs/agents/04-orquestacion-y-sesiones.md`, sección 3)
 - [ ] **ADR — Identidad visual en canal: Janus por defecto, multi-bot opcional por
       agente** (`channel_identity: own_bot | shared_with_prefix`), con los matices de
-      estabilidad conocidos del multi-token en OpenClaw (doc 12, sección 4.4)
+      estabilidad conocidos del multi-token en OpenClaw (`docs/agents/04-orquestacion-y-sesiones.md`, sección 4)
 - [ ] **ADR — Topología de carpetas obligatoria por agente** (`Skills/`,
       `Instructions/`, `Rules/`, `Tools/`, `agent.md`, `agent.toml`) como mecanismo de
-      "filesystem como harness" (doc 12, sección 3.1.1)
+      "filesystem como harness" (`docs/agents/03-skills-y-config.md`, sección 2.1)
 - [ ] **ADR — Fork de `filesystem-mcp-rs` sobre el MCP de filesystem oficial**, por
       carecer de eliminación recursiva, búsqueda de patrones limitada, y sin
       indexación — con skill obligatorio de uso para mitigar confusión del modelo
-      (doc 11, sección 3; doc 12, sección 3.1)
+      (`docs/stack/02-monorepo.md`; `docs/agents/03-skills-y-config.md`, sección 2)
 - [ ] **ADR — Indexación híbrida (BM25 + vectorial) extraída de Hermes** (`qmd`,
       Semantic Codebase Search, Hybrid Tool Pre-Selection) para identidad de agente y
-      proyectos del usuario, separada de la memoria episódica en `sqlite-vec` (doc 12,
-      sección 2.5)
-- [ ] **ADR — Licencia MIT, código abierto** (doc 11, sección 14)
+      proyectos del usuario, separada de la memoria episódica en `sqlite-vec` (`docs/agents/02-memoria.md`,
+      sección 5)
+- [ ] **ADR — Licencia MIT, código abierto** (`docs/stack/10-gui-automation-y-licencia.md`, sección 2)
 
 ---
 

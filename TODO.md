@@ -1,8 +1,9 @@
 # TODO — Janus
 
-Estado del proyecto: arquitectura pura (docs 00-10) + tech-stack (doc 11) cerrados.
-Este archivo es la lista viva de lo que falta antes de poder implementar. Se actualiza
-a medida que cada punto se resuelve (vía `/discuss`, `/adr` o `/spec`).
+Estado del proyecto: arquitectura pura (docs 00-10) + tech-stack (doc 11) + modelo de
+agentes (doc 12) cerrados. Este archivo es la lista viva de lo que falta antes de
+poder implementar. Se actualiza a medida que cada punto se resuelve (vía `/discuss`,
+`/adr` o `/spec`).
 
 Orden de trabajo acordado: **documentar todo → ADRs de las decisiones grandes → specs
 por componente → kanban (GitHub Projects u otra app) → implementación.**
@@ -11,33 +12,40 @@ por componente → kanban (GitHub Projects u otra app) → implementación.**
 
 ## 1. Discusiones de arquitectura pendientes (`/discuss`)
 
-### 1.1 Sistema agéntico completo de Janus — LA MÁS GRANDE, prioridad primera
-Candidato a `docs/12-modelo-de-agentes-de-janus.md`. Incluye, sin resolver todavía:
-- Cómo se definen skills, comandos y reglas de comportamiento propias de Janus (más
-  allá de lo heredado del motor de razonamiento extraído de Hermes).
-- Personalidades y voces por agente: cómo se configuran, cómo se persisten, qué motor
-  de TTS/STT usa Janus y con qué parámetros de expresividad (Hermes tiene una
-  limitación real conocida acá — ver doc 11 sección 6.1 — que Janus no debe heredar).
-- Agentes personalizables por el usuario: qué puede personalizar, cómo se declara.
-- Cambio dinámico de modelo/proveedor por agente, configurado globalmente.
-- Cómo interactúa esto con el Registro de Capacidades (doc 04) y con el motor de
-  razonamiento extraído (`libs/reasoning-engine/`).
+### 1.1 ~~Sistema agéntico completo de Janus~~ — RESUELTO
+Ver `docs/12-modelo-de-agentes-de-janus.md`. Cubre: composición AgentCore/AgentPersona,
+memoria de dos niveles con búsqueda semántica, skills/comandos compartidos con
+delegación por especialidad, config por agente (TOML + Pydantic + hot-reload
+condicional), orquestación exclusiva de Janus por ensamblado de toolset, voz con
+proveedor intercambiable (Kokoro/Whisper de default), cambio dinámico de modelo vía
+tool call, y concurrencia con cola FIFO por tipo de agente (Janus exento).
 
 ### 1.2 Multi-avatar / multi-identidad-visible en un mismo canal
 ¿Puede `channel-gateway` (fork de OpenClaw) sostener varios bots con nombre y avatar
 propios posteando en un mismo grupo de Discord/WhatsApp, o el tope real es un solo bot
-con prefijo de texto por agente? No verificado técnicamente todavía. Bloquea parte del
-diseño de la sección 1.1 (si las personalidades tienen o no identidad visual propia).
+con prefijo de texto por agente? No verificado técnicamente todavía. Ahora más
+relevante que antes: cada agente tiene `AgentPersona` propia (doc 12), lo cual hace
+deseable (no obligatorio) que esa identidad se refleje visualmente en canales que lo
+soporten. Verificar en el `/spec` de `channel-gateway`.
 
 ### 1.3 Motor de reglas para políticas de fallo extensibles
 Más allá de las políticas declarativas estilo Docker ya fijadas (doc 11 sección 12):
 ¿se construye un motor de reglas/callbacks registrables para que el usuario defina
 políticas de fallo custom por componente? Decisión de diseño del Core de Traducción.
+Conexión nueva (doc 12): la política de aprobación de cambio de proveedor de modelo
+(ask_everytime/allow_always) podría beneficiarse del mismo motor si se construye.
 
 ### 1.4 Descubrimiento y arbitraje — flecos menores
 - Confirmar el nombre final del archivo de config (se usó `config/janus.toml` como
   supuesto de trabajo, nunca confirmado explícitamente).
 - Licencia del propio código de Janus (abierto o privado).
+
+### 1.5 Nuevos flecos abiertos por el doc 12
+- Un archivo de config por agente vs una sección por agente en un único archivo TOML.
+- Catálogo inicial concreto de categorías de memoria (qué categorías existen desde el
+  día uno: preferencias, proyectos, setup técnico, ¿alguna más?).
+- Alternativa al MCP de filesystem para escritura de config, si se decide evaluar una
+  superior (quedó explícitamente abierto, sin alternativa concreta evaluada).
 
 ---
 
@@ -76,6 +84,16 @@ futura:
 - [ ] **ADR — Sistema de tokens scopeados propio, en vez de asumir confianza por
       localhost**
 - [ ] **ADR — GUI automation dividida Rust (bajo nivel) + Python (orquestación)**
+- [ ] **ADR — Composición AgentCore/AgentPersona, no herencia** (doc 12, sección 1.1)
+- [ ] **ADR — Orquestación exclusiva de Janus por ensamblado de toolset**, no por
+      permisos en runtime (doc 12, sección 4.1) — vale la pena documentar bien el
+      razonamiento de seguridad detrás de esto.
+- [ ] **ADR — Memoria por categorías con búsqueda semántica vía `sqlite-vec`**, en vez
+      de una base vectorial dedicada aparte (doc 12, sección 2.3)
+- [ ] **ADR — Kokoro + Whisper/faster-whisper como defaults de voz**, con
+      intercambiabilidad por agente (doc 12, sección 5)
+- [ ] **ADR — Concurrencia: tope solo por número de agentes (no por recursos), cola
+      FIFO por carriles de tipo, Janus exento** (doc 12, sección 7)
 
 ---
 
@@ -85,17 +103,23 @@ Se generan después de cerrar los puntos 1 y 2. Orden sugerido (de más fundacio
 más periférico):
 
 1. `libs/adapters/` — contratos ABC (`SpokeAdapter` y variantes)
-2. `libs/config/` — esquema Pydantic + parser TOML
-3. `libs/persistence/` — acceso SQLite vía `aiosqlite`, runner de migraciones
-4. `proto/` + generación `buf` → `libs/proto-py/`
-5. `apps/core-gateway/` — Core de Traducción + Registro de Capacidades (orquestador
+2. `libs/config/` — esquema Pydantic + parser TOML, incluyendo schemas de
+   `AgentCore`/`AgentPersona` con marca `requires_restart` por campo
+3. `libs/persistence/` — acceso SQLite vía `aiosqlite`, runner de migraciones, esquema
+   de memoria de dos niveles
+4. `libs/memory/` — categorización y búsqueda semántica sobre `sqlite-vec`
+5. `proto/` + generación `buf` → `libs/proto-py/`
+6. `apps/core-gateway/` — Core de Traducción + Registro de Capacidades (orquestador
    central)
-6. `libs/auth/` — tokens scopeados
-7. `libs/observability/` — logging estructurado + ring buffer + Redis pub/sub
-8. `libs/reasoning-engine/` — extracción y refactor del motor de Hermes
-9. `packages/channel-gateway-core/` + `apps/channel-gateway/` — fork de OpenClaw
-10. `crates/gui-automation/` — automatización de GUI en Rust + binding PyO3
-11. Sistema agéntico de Janus (depende de que 1.1 esté resuelto)
+7. `libs/auth/` — tokens scopeados
+8. `libs/observability/` — logging estructurado + ring buffer + Redis pub/sub
+9. `libs/reasoning-engine/` — extracción y refactor del motor de Hermes, incluyendo
+   ensamblado de toolset por agente
+10. `libs/capabilities/` — Registro de Capacidades extendido: delegación por
+    especialidad, cola/concurrencia por tipo de agente, cambio dinámico de proveedor
+11. `packages/channel-gateway-core/` + `apps/channel-gateway/` — fork de OpenClaw
+    (incluye resolver 1.2, multi-avatar)
+12. `crates/gui-automation/` — automatización de GUI en Rust + binding PyO3
 
 ---
 
@@ -109,6 +133,7 @@ más periférico):
 
 ## Próximo paso inmediato
 
-Arrancar `/discuss` del punto **1.1 (sistema agéntico completo de Janus)** — es la
-pieza más grande y la que más condiciona el resto (1.2, parte de las specs de
-`reasoning-engine` y `channel-gateway`, y varios ADRs).
+Quedan tres discusiones menores abiertas (1.2, 1.3, 1.4/1.5) antes de pasar a ADRs.
+Ninguna es tan grande como la 1.1 ya resuelta — se pueden resolver en una sola sesión
+de `/discuss` combinada, o arrancar directo con `/adr` de las decisiones ya firmes y
+volver a estas cuando surjan naturalmente durante los `/spec`.

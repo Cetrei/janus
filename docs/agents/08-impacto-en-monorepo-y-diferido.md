@@ -19,6 +19,8 @@ fijada ahí, extendiendo responsabilidades:
   modelo (`agents/06-cambio-dinamico-de-modelo.md`).
 - `libs/persistence/` — gana el esquema de memoria de dos niveles
   (`agents/02-memoria.md`, sección 2).
+- `libs/voice/` (nueva, ver `specs/spec-13-voice.md`) — TTS y STT propios; no estaba
+  asignada a ninguna pieza del layout de `stack/02`.
 - `libs/memory/` (nueva) — lógica de categorización auto-extensible
   (`agents/02-memoria.md`, sección 2.1, catálogo `profile` como semilla) y búsqueda
   semántica sobre `sqlite-vec` (`agents/02-memoria.md`, secciones 3 y 4).
@@ -59,6 +61,9 @@ todo lo aquí definido es Python (más el fork en Rust de filesystem ya incorpor
    por tarea, suscripción dinámica, cierre por conteo de oyentes externos) está fijado;
    la estructura de datos concreta (tabla de sesiones, tabla de suscripciones) se
    resuelve en `/spec`.
+
+Los cuatro puntos anteriores tienen propuesta concreta en `specs/` (specs 02, 03 y 07),
+pendiente de confirmar.
 
 Los puntos de motor de reglas de políticas de fallo, y de alternativa al MCP de
 filesystem oficial, que figuraban aquí como diferidos, quedaron resueltos: ver

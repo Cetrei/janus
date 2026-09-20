@@ -49,8 +49,9 @@ Esta config es editable por tres vías, todas igualmente válidas:
    **`crates/filesystem-mcp/`** (fork de `filesystem-mcp-rs`, ver
    `stack/02-monorepo.md` — elegido sobre el MCP de filesystem oficial porque este
    último carece de eliminación de archivos, tiene búsqueda de patrones limitada, y no
-   resuelve indexación; el fork agrega `delete_path` recursivo, `bulk_edits` y
-   `grep_files` con regex), acompañado de un **skill obligatorio que documenta cómo
+   resuelve indexación; el fork aporta `bulk_edits` atómico y `grep_files` con regex,
+   y lo que falte tras auditar el upstream, que ya trae `delete_path` recursivo
+   según lo verificado en septiembre de 2026, ver `specs/spec-08-filesystem-mcp.md`), acompañado de un **skill obligatorio que documenta cómo
    usarla correctamente** — la mitigación directa al problema observado de que un
    modelo puede confundirse con su propio sistema de edición de archivos si solo cuenta
    con las tools, sin ejemplos concretos de uso (orden típico de llamadas, cuándo usar

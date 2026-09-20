@@ -18,6 +18,10 @@ retry_policy = "on-failure"
 max_retries = 3
 ```
 
+Aclaración de las specs: `channel-gateway` es cliente gRPC del núcleo y su `port` es el
+endpoint HTTP de salud en loopback (`specs/spec-14-channel-gateway.md`). El núcleo es
+quien arranca y supervisa ese proceso (`specs/spec-11-core-gateway.md`).
+
 ### 1.2 Spokes externos: se presentan ante Janus vía endpoint de registro
 
 Un spoke externo (Claude Desktop, Gemini Desktop, u otro que el usuario decida

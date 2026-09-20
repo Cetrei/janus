@@ -187,6 +187,12 @@ que el diseño completo de Janus provee y Relay, por sí solo, no.
   tiempo), sin exponer una API key utilizable por herramientas externas.
 - Cerrado: sin API de extensión pública más allá de ser cliente de MCP.
 
+**Actualización (septiembre de 2026):** Claude Desktop tiene beta oficial en Linux desde
+el 30 de junio de 2026 (Ubuntu 22.04 o superior y Debian 12 o superior, x86_64 y arm64).
+La beta no incluye Computer Use ni dictado por voz, y no tiene soporte completo de
+atajos globales en Wayland. Esto habilita el uso del mecanismo de automatización de GUI
+en el host Linux y el Raspberry Pi objetivo. Ver `specs/spec-12-gui-automation.md`.
+
 **Consecuencia para el adaptador:** dado que Claude Desktop no expone un servidor ni
 una API que Janus pueda invocar de forma programática convencional, su adaptador se
 clasifica como tipo 2.4 ("spoke controlado por automatización de interfaz gráfica",
@@ -211,7 +217,8 @@ Janus lo hace por él a nivel de enrutamiento de capacidades.
 
 **Capacidades relevantes observadas:**
 - Aplicación nativa de Google: lanzada para macOS en abril de 2026, y para Windows el
-  10 de septiembre de 2026 (activada con Alt+Space).
+  10 de septiembre de 2026 (activada con Alt+Space). No se ha verificado una versión para
+  Linux; por eso su adaptador queda diferido en `specs/spec-15-spoke-adapters.md`.
 - Cerrada, sin API de extensión pública conocida más allá de lo que exponga
   nativamente; no se ha identificado un servidor MCP propio.
 

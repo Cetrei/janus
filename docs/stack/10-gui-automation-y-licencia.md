@@ -17,8 +17,10 @@ lenguaje.
   no un caso secundario.
 
 El detalle fino de esta pieza (qué biblioteca exacta de Rust, cómo se abstrae por SO)
-queda explícitamente diferido a la fase de `/spec` de este componente específico, por
-ser relativamente aislado del resto del núcleo.
+quedó diferido a la fase de `/spec` de este componente y está propuesto en
+`specs/spec-12-gui-automation.md`, con un spike de validación previo. Dato relevante
+verificado en septiembre de 2026: Raspberry Pi OS usa Wayland (`labwc`) por defecto y las
+opciones de input para Wayland son aún experimentales, así que no se puede asumir X11.
 
 ## 2. Licencia
 

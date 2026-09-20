@@ -39,6 +39,30 @@ variantes), global con override por agente (`agents/06-cambio-dinamico-de-modelo
 conflicto para capacidades que no son cambio de proveedor de modelo, y si esa prioridad
 es global o configurable por capacidad/rol.
 
+**Propuesta pendiente de confirmar** (`specs/spec-09-capabilities.md`): salud, luego
+política del usuario, luego sugerencia de rol; comportamiento configurable con
+`on_preferred_unavailable` (`fallback` por defecto, `block`, `ask`).
+
+**Precisión del usuario sobre el mecanismo de fallback:** son dos cosas separadas.
+
+1. La *cadena de fallback* es una política declarativa que el propio usuario define en
+   la configuración del agente: reglas dinámicas encadenables del tipo "usar Gemini; si
+   falla, usar Claude; si falla, lo que OpenRouter permita; si falla, esperar". No es un
+   valor único (`fallback` | `block` | `ask`) sino una secuencia ordenada de N reglas que
+   el usuario puede editar.
+2. El *juicio de si un fallo amerita seguir esa cadena o directamente avisar al
+   usuario* no debe ser una regla precodificada ni parte de la cadena declarativa: es
+   una decisión de Janus (el agente orquestador) en runtime, evaluando si el fallo es
+   de un tipo mitigable por reintento/cambio de candidato o si necesita anunciarse.
+   Esto separa "qué alternativas hay y en qué orden" (declarado por el usuario) de
+   "cuándo vale la pena intentarlas vs cortar y avisar" (criterio de Janus, no una
+   tabla estática).
+
+Esto cambia el diseño propuesto en la spec 09: `on_preferred_unavailable` como enum
+cerrado no alcanza para cubrir cadenas de N pasos, y el criterio de escalar a aviso no
+debe vivir como un valor fijo del enum sino como una evaluación del propio Janus. Ver
+spec 09 para el ajuste concreto.
+
 ## 2. Mecanismo concreto de captura y consulta de memoria de largo plazo — PARCIALMENTE RESUELTA
 **Origen:** `06-modelo-de-persistencia-y-estado.md`, sección 2.4.
 
@@ -57,6 +81,9 @@ similitud entre la consulta y la entrada (`agents/02-memoria.md`).
 automática por la infraestructura vs. decisión explícita del agente).
 `agents/02-memoria.md` no lo fija.
 
+**Propuesta pendiente de confirmar** (`specs/spec-07-memory.md`): captura explícita por
+defecto mediante la tool `remember`, con captura automática opcional desactivada.
+
 ## 3. Mecanismo de autenticación/autorización para control externo — PARCIALMENTE RESUELTA
 **Origen:** `07-superficie-para-gui-futura.md`, sección 4.
 
@@ -74,6 +101,10 @@ sección 1).
 **Residual abierto:** cómo se verifica que quien emite una orden de control a través de
 un canal de mensajería o de voz es el usuario legítimo. Los tokens cubren el acceso de
 componentes y spokes al Core de Traducción, no la identidad del remitente en el canal.
+
+**Propuesta pendiente de confirmar** (`specs/spec-11-core-gateway.md` y
+`specs/spec-14-channel-gateway.md`): verificación en dos capas, con el emparejamiento y la
+lista de permitidos del gateway más una revalidación en el núcleo contra `identity.owner`.
 
 ## 4. Gobernanza y licencia de Hermes — RESUELTA
 **Origen:** `08-mapa-de-componentes-reales.md`, sección 1.
@@ -143,9 +174,9 @@ extrae; `stack/05-harnesses-hermes-openclaw.md`, sección 3). Defaults de fábri
 para TTS y Whisper (o `faster-whisper`) para STT, con proveedor intercambiable por
 agente mediante `voice_provider` en `AgentPersona` (`agents/05-voz.md`).
 
-**Residual abierto:** dónde vive el código propio de voz. `stack/05` lo describe como
-"librería propia a definir", y no figura en el layout del monorepo
-(`stack/02-monorepo.md`) ni en las specs pendientes de `TODO.md`.
+**Residual resuelto por las specs:** el código propio de voz vive en `libs/voice/`
+(`specs/spec-13-voice.md`), invocado por el núcleo como capacidad propia. Queda abierta
+la conversación dúplex en tiempo real, fuera del alcance de la primera versión.
 
 ## 9. Modelo de multi-tenencia / multi-usuario — ABIERTA
 **No se ha discutido en ningún documento anterior.**
@@ -172,6 +203,10 @@ reintento.
 Las políticas de fallo de `stack/09-politicas-de-fallo.md` se declaran por harness o
 spoke y no cubren dependencias entre tareas.
 
+**Propuesta pendiente de confirmar** (`specs/spec-11-core-gateway.md`): cada tarea lleva
+`on_dependency_failure` con valores `BLOCK` (por defecto), `CANCEL` y `RETRY_REASSIGN`.
+La pregunta sigue ABIERTA hasta que se confirme.
+
 ## 11. Tecnología concreta para detección de elementos y síntesis de input en automatización de interfaz gráfica — PARCIALMENTE RESUELTA
 **Origen:** `10-automatizacion-de-interfaz-grafica.md`, secciones 3 y 4.
 
@@ -192,6 +227,12 @@ sección 1).
 
 **Residual abierto:** la biblioteca o framework concreto de Rust para detección de
 elementos y para inyección de input, diferida a la fase `/spec` de ese componente.
+
+**Propuesta pendiente de confirmar** (`specs/spec-12-gui-automation.md`): detección por
+árbol de accesibilidad (`atspi`), captura con `xcap`, input con `enigo` y backends de
+ventanas intercambiables según el compositor, con un spike de validación antes de fijar
+la API. Se advierte que Wayland no ofrece una API única y que Raspberry Pi OS lo usa por
+defecto.
 
 ## 12. Alcance de aplicaciones soportadas de fábrica vía automatización de interfaz gráfica — ABIERTA
 **Origen:** `10-automatizacion-de-interfaz-grafica.md`, sección 1.

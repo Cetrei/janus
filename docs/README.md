@@ -1,7 +1,8 @@
 # Documentación de Janus
 
 El tech-stack (`stack/`) se deriva de la arquitectura (`architecture/`), y esta última es
-la fuente de verdad. El modelo de agentes (`agents/`) extiende ambos.
+la fuente de verdad. El modelo de agentes (`agents/`) extiende ambos, y las specs de
+implementación (`specs/`) se derivan de los tres.
 
 Estado y trabajo pendiente: `../TODO.md`.
 
@@ -42,3 +43,14 @@ Estado y trabajo pendiente: `../TODO.md`.
 - `06-cambio-dinamico-de-modelo.md` — cambio de proveedor de modelo vía tool call.
 - `07-concurrencia.md` — cola FIFO por carriles, Janus exento.
 - `08-impacto-en-monorepo-y-diferido.md` — piezas que ganan responsabilidades y puntos diferidos a `/spec`.
+
+## `specs/` — specs de implementación
+
+Índice, orden de implementación, dependencias y decisiones propuestas en
+`specs/README.md`. Una spec por componente (15 en total), desde `spec-01-proto.md` hasta
+`spec-15-spoke-adapters.md`.
+
+## `_deprecated/`
+
+Material archivado que ya no forma parte del flujo (por ejemplo, el antiguo registro de
+ADRs). No se mantiene ni se referencia desde el resto de la documentación.

@@ -106,6 +106,11 @@ proyecto):
   divergiendo de su diseño original (el learning loop automático completo no se trajo
   tal cual, ver sección 1).
 
+**OpenClaw:** esta política se definió solo para Hermes. Para OpenClaw (licencia MIT según
+su README, proyecto mantenido por una fundación, con versiones fechadas frecuentes) se
+propone una revisión mensual filtrada a avisos de seguridad y cambios de protocolo de los
+canales; ver `specs/spec-14-channel-gateway.md`, pendiente de confirmar.
+
 **Proceso fijado:** no merge automático ni seguimiento en tiempo real del repo
 completo. Revisión periódica (cadencia mensual) filtrada a dos fuentes: el changelog/
 releases de `hermes-agent` en busca de (a) nuevos proveedores de modelo soportados y

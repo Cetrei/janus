@@ -50,9 +50,14 @@ libs/                      # Python
   persistence/             # Persistencia Transversal: acceso a SQLite vía
                             # aiosqlite, migraciones .sql versionadas.
   adapters/                # Contratos ABC (SpokeAdapter y variantes) +
-                            # implementaciones concretas (HermesAdapter si aplica
-                            # como spoke externo, OpenClawAdapter, adaptadores de
-                            # spokes externos plug-and-play).
+                            # implementaciones concretas en spokes/<nombre> con
+                            # extras opcionales (motor de razonamiento, puente de
+                            # canales, OpenClaude, gRPC y MCP genericos, GUI,
+                            # modelos por API). Ver specs 04 y 15.
+  memory/                  # Categorizacion auto-extensible y busqueda semantica
+                            # sobre sqlite-vec (agents/02). Spec 07.
+  voice/                   # TTS y STT propios de Janus, proveedores
+                            # intercambiables. Spec 13.
   config/                  # Esquema Pydantic + parser TOML. Expone config
                             # validada a cualquier apps/* sin que el consumidor
                             # sepa cómo está guardada en disco.
@@ -71,9 +76,11 @@ crates/                    # Rust
                             # Abstrae por SO (Linux vía X11/Wayland es la
                             # prioridad real dado el target de Raspberry Pi).
   filesystem-mcp/          # Fork de filesystem-mcp-rs (port en Rust del filesystem
-                            # MCP oficial), extendido con delete_path recursivo,
-                            # bulk_edits, grep_files (regex) y edit_file con
-                            # diff+dry-run. Sin indexación propia — la indexación
+                            # MCP oficial), extendido con bulk_edits atomico y
+                            # grep_files (regex) y lo que falte tras auditar el
+                            # upstream (delete_path recursivo y edit_file con
+                            # diff+dry-run ya existen alli, verificado en 2026-09;
+                            # licencia por confirmar, spec 08). Sin indexación propia — la indexación
                             # vive en libs/reasoning-engine/ (ver
                             # agents/02-memoria.md sección 5). Reemplaza al MCP de
                             # filesystem oficial en toda referencia de stack/ y
@@ -84,14 +91,18 @@ packages/                  # TypeScript
                             # Refactorizado únicamente donde Janus necesite
                             # tocarlo para integrarse (config, forma de recibir
                             # instrucciones de Janus), preservando el resto.
+  proto-ts/                # Codigo TypeScript generado desde proto/ para
+                            # channel-gateway (spec 14).
 
 proto/                     # Agnóstico de lenguaje — fuente de verdad del modelo
                             # semántico.
   janus/
     v1/
+      common.proto         # Payload, Artifact, ErrorInfo (spec 01).
       semantic.proto       # SemanticRequest, SemanticResponse, tipos base.
       task.proto            # Tareas y dependencias (architecture/05).
       capability.proto      # Registro de Capacidades (architecture/04).
+      session.proto  channel.proto  spoke.proto  gateway.proto  # spec 01
   buf.yaml                 # Config de buf: lint + breaking change detection.
   buf.gen.yaml              # Config de generación: qué plugin genera qué, hacia
                             # dónde (libs/proto-py/, y futuros packages/*
@@ -101,8 +112,11 @@ config/
   janus.toml               # Config raíz: harnesses embebidos, spokes externos,
                             # puertos, políticas de fallo, políticas de selección.
                             # TOML, no YAML (ver stack/06-config-toml-pydantic.md).
+  agents/<Nombre>/         # Un folder por agente con topologia obligatoria
+                            # (agents/03 seccion 2.1). Ubicacion propuesta en spec 02.
+  catalog/                 # Catalogo compartido de skills y comandos (spec 02).
 
-docs/                       # Documentación: architecture/, stack/, agents/.
+docs/                       # Documentación: architecture/, stack/, agents/, specs/.
 ```
 
 ---

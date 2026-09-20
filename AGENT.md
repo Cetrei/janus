@@ -6,7 +6,7 @@
 Sistema operativo personal de agentes (estrella pura: ningún spoke habla con otro, todo pasa por Janus). Uso personal, un solo host (PC o Raspberry Pi). Licencia MIT, copyright Joanfer.
 
 ## Estado (2026-09-20)
-Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 specs de implementación escritas** en `docs/specs/`. Todas las decisiones propuestas por las specs quedaron confirmadas (2026-09-20). Antes de implementar hay que resolver la colisión entre el namespace `janus` del código generado de protobuf y el paquete `janus` de PyPI (spec 01, Open Questions). Siguiente paso: armar el kanban desde las specs. No hay código todavía.
+Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 specs de implementación escritas** en `docs/specs/`. Todas las decisiones propuestas por las specs quedaron confirmadas (2026-09-20). Siguiente paso: armar el kanban desde las specs. No hay código todavía.
 
 ## Mapa
 * `TODO.md`: lista viva. Decisiones pendientes de confirmar (sección 2), estado de las specs (sección 3) y trabajo previo a implementar (sección 4).
@@ -16,6 +16,7 @@ Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 
 * `docs/agents/`: modelo de agentes (memoria, skills, orquestación, voz, concurrencia).
 * `docs/specs/`: una spec por componente. Índice, orden y tabla de decisiones propuestas en `docs/specs/README.md`.
 * `docs/_deprecated/`: material archivado (ADRs retirados por decisión del usuario). No se usa.
+* `CODING_STANDARDS.md`: estándares de código para contribuidores, en inglés. Nombres con la convención nativa de cada lenguaje (`snake_case` en Python y Rust, `camelCase` en TypeScript).
 
 ## Decisiones vigentes clave
 * Núcleo: un solo proceso Python asyncio (`apps/core-gateway`). Harnesses base: Hermes extraído a `libs/reasoning-engine`, OpenClaw forkeado en `packages/channel-gateway-core`.
@@ -88,11 +89,20 @@ Se cerraron seis decisiones propuestas por las specs:
 * **Nombres (`stack/02` sección 4)**: prefijo `janus` en todo. Python `janus-<corto>` e
   import `janus_<corto>`; Rust `janus-<corto>`; TypeScript `@janus/<corto>`, con
   `private: true`. Las carpetas no llevan prefijo. Python mínimo 3.11.
-* **Hallazgo**: el paquete `janus` de PyPI (cola sync/async de aio-libs) colisiona con el
-  namespace `janus` del código generado de protobuf. Se decide antes de generar código
-  (spec 01, Open Questions).
-* **`uvicorn`**: el usuario lo mencionó como parte del stack; ninguna spec lo nombraba.
-  Queda como verificación de la spec 11 (servidor ASGI del transporte HTTP de MCP).
-* **Pendiente detectado, sin corregir**: la spec 01 (`task.proto`) y la spec 03 (columna
-  `tasks.on_dependency_failure`) todavía definen el enum estático `DependencyFailurePolicy`
-  que la pregunta 10 ya reemplazó por `DependencyFailureTriage` (spec 11).
+* **Runtimes (`stack/02` sección 3.1)**: `uvicorn` para toda superficie HTTP de Python
+  (hoy, el transporte HTTP del servidor MCP; gRPC sigue en `grpc.aio` dentro del mismo
+  event loop, spec 11 requisito 7bis), Bun como runtime y gestor de TypeScript y Cargo
+  para Rust. Por validar en la fase 0 de la spec 14: Bun frente al fork de OpenClaw y al
+  streaming gRPC bidireccional (`node:http2`). Camino aprobado si falla: ese proceso corre
+  con Node 22 (`engines.node`, `.node-version` y un `command` que lanza `node`), sin
+  decisión nueva.
+* **Colisión de namespace resuelta**: el paquete `janus` de PyPI (cola sync/async de
+  aio-libs) habría chocado con un namespace `janus` propio. El paquete proto pasa a
+  `janus_proto.v1`, directorio `proto/janus_proto/v1/`, y el código generado vive dentro
+  del paquete `janus_proto` junto a su fachada (spec 01, `stack/02` sección 4).
+* **Enum obsoleto corregido**: `DependencyFailurePolicy` salió de `task.proto` (spec 01) y
+  de la tabla `tasks` (spec 03); lo reemplaza `DependencyFailureTriage` (spec 11).
+* **Estándares de código**: `CODING_STANDARDS.md` es la traducción al inglés del `.txt`
+  que el usuario agregó al root (ya borrado por él). Decidido: convención nativa de cada
+  lenguaje (`snake_case` en Python y Rust, `camelCase` en TypeScript,
+  `SCREAMING_SNAKE_CASE` para constantes, `PascalCase` para tipos). Las specs no cambian.

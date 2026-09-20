@@ -15,9 +15,9 @@ escala.
 
 | Pieza | Lenguaje | Razón |
 |---|---|---|
-| `core-gateway` (Core de Traducción + Registro + Persistencia) | Python (asyncio) | Carga de trabajo I/O-bound (proxy/traductor entre spokes), no cómputo pesado. Ecosistema MCP y gRPC maduro en Python. |
+| `core-gateway` (Core de Traducción + Registro + Persistencia) | Python (asyncio), servido con `uvicorn` | Carga de trabajo I/O-bound (proxy/traductor entre spokes), no cómputo pesado. Ecosistema MCP y gRPC maduro en Python. |
 | Motor de razonamiento (extracción de Hermes) | Python | Coincide con el lenguaje del núcleo; cero fricción de integración. |
-| `channel-gateway` (fork de OpenClaw) | TypeScript | Lenguaje nativo del proyecto forkeado; no se reescribe. |
+| `channel-gateway` (fork de OpenClaw) | TypeScript sobre Bun | Lenguaje nativo del proyecto forkeado; no se reescribe. |
 | GUI automation (pieza de bajo nivel) | Rust | Trabajo potencialmente pesado (captura de pantalla, inyección de eventos de OS); bindings nativos más naturales que en Python puro. Expuesto a Python vía `PyO3`/`maturin`. |
 | Contratos de adaptador de spoke | Python, vía `abc` (Abstract Base Classes) | Decisión explícita del usuario: OOP con contratos formales, no duck typing. |
 

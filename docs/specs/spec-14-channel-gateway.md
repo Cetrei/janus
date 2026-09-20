@@ -13,7 +13,7 @@ Convertir el fork completo de OpenClaw (`stack/05` sección 2) en el harness de 
 Una vez implementado:
 * Un mensaje que llega por WhatsApp, Telegram, Discord, Slack u otro canal soportado llega a `core-gateway` como `InboundEvent`.
 * Lo que Janus produce sale al canal como `OutboundMessage`, con la identidad visual correcta.
-* `channel-gateway` corre como proceso propio (Node), supervisado por el núcleo, y su caída o error no afecta al resto.
+* `channel-gateway` corre como proceso propio (Bun), supervisado por el núcleo, y su caída o error no afecta al resto.
 
 Esta spec cubre el fork y su puente. La verificación de identidad de segunda capa, la orquestación y la voz son del núcleo (spec 11 y spec 13).
 
@@ -38,7 +38,7 @@ Todo esto se revalida en la fase 0.
 2. Producir `packages/channel-gateway-core/UPSTREAM.md` con: versión fijada, inventario de canales y de subsistemas (agentes, memoria, skills, cron, canvas, voz, apps nativas, interfaz de control), y para cada subsistema `mantener | desactivar por configuración | eliminar`, con motivo.
 3. Elegir el punto de integración con el menor diff posible respecto a upstream. Orden de preferencia: (a) un plugin de harness de agente propio que sustituya la ejecución de agentes por el puente hacia Janus; (b) una extensión en el enrutamiento de entrada; (c) parche en el código de enrutamiento. La elección y su justificación quedan en `UPSTREAM.md`.
 4. Refactor limitado a lo necesario (`stack/05` sección 2): configuración, forma de recibir instrucciones de `core-gateway` y desactivación de lo que compite con Janus. El resto del comportamiento de gateway multi canal se preserva.
-4bis. Gestor de paquetes: el usuario decidió bun para todos los workspaces de TypeScript (`stack/02` sección 3), pero OpenClaw es un workspace `pnpm` propio que exige Node 22. La auditoría resuelve y documenta en `UPSTREAM.md`: (a) si el fork instala, compila y arranca con `bun install`, incluidas sus dependencias nativas de canales y de medios; (b) si el runtime del proceso sigue siendo Node 22 con bun solo como gestor, o si Bun también sirve de runtime; (c) cómo convive el workspace interno del fork con el workspace raíz (incluir sus miembros internos en los globs, o dejarlo como workspace aislado consumido como dependencia ya construida). Si bun no es viable para el fork, la alternativa es dejarlo como workspace aislado con `pnpm`, y esa decisión la toma el usuario antes de codificar.
+4bis. Runtime y gestor de paquetes: el usuario decidió Bun como runtime y como gestor de todos los workspaces de TypeScript (`stack/02` secciones 3 y 3.1). OpenClaw es un workspace `pnpm` propio que exige Node 22. La auditoría resuelve y documenta en `UPSTREAM.md`: (a) si el fork instala, compila y arranca con Bun, incluidas sus dependencias nativas de canales y de medios; (b) si el streaming gRPC bidireccional del puente funciona bajo Bun, lo que depende de su compatibilidad con `node:http2` (candidatos `@grpc/grpc-js` y `@connectrpc/connect-node`); (c) cómo convive el workspace interno del fork con el workspace raíz (incluir sus miembros internos en los globs, o dejarlo como workspace aislado consumido como dependencia ya construida). Si (a) o (b) no son viables bajo Bun, `apps/channel-gateway` corre con Node 22: declara `engines.node` y un `.node-version`, y `harnesses.channel-gateway.command` lanza `node` en lugar de `bun` (`stack/02` sección 3.1). El usuario ya aprobó este camino, así que no requiere una decisión nueva, y Bun sigue siendo el gestor y el runtime por defecto del resto de TypeScript. Si el problema es (c) o la instalación, la alternativa es dejar el fork como workspace aislado con `pnpm`, y esa decisión sí la toma el usuario antes de codificar.
 
 ### Estructura de procesos
 5. `packages/channel-gateway-core/` contiene el fork. `apps/channel-gateway/` es el proceso ejecutable que lo importa: carga la configuración de runtime, arranca el gateway, levanta el puente y expone `/health`.
@@ -92,7 +92,7 @@ Todo esto se revalida en la fase 0.
 * **Performance**: latencia añadida por el puente (normalizar y reenviar un mensaje) menor a 20 ms p95; memoria en reposo del proceso menor a 350 MiB con 3 canales activos (objetivo, depende de lo que el fork mantenga); arranque menor a 10 s. Propuestos, se ajustan tras medir.
 * **Security**: token por archivo `0600`, nunca por línea de comandos; credenciales de canal solo en el archivo de runtime; escucha únicamente en loopback; entrada de canal tratada como no confiable; el gateway no puede autorizar nada; sin acceso a modelos ni ejecución de tools.
 * **Reliability**: reconexión con backoff; cola de entrada y de salida acotadas; entrega idempotente; caída del gateway no afecta al núcleo (el supervisor lo reinicia según la política, spec 11); errores de una plataforma no tumban las demás.
-* **Portability**: Node 22 o superior como runtime del fork, bun como gestor de paquetes y de workspaces (pendiente de validar con el fork, requisito 4bis), Linux x86_64 y aarch64. Sin extensiones nativas propias más allá de las que traiga el fork (auditar en la fase 0 las de arquitectura ARM).
+* **Portability**: Bun como runtime y como gestor de paquetes y de workspaces (decisión del usuario), Linux x86_64 y aarch64. Si la fase 0 lo exige, Node 22 como runtime solo de este proceso (requisito 4bis). Sin extensiones nativas propias más allá de las que traiga el fork (auditar en la fase 0 las de arquitectura ARM).
 
 ---
 
@@ -170,7 +170,7 @@ apps/
 
 ## Data Models
 
-Los mensajes son los de `janus.v1` (spec 01). Modelos propios del proceso:
+Los mensajes son los de `janus_proto.v1` (spec 01). Modelos propios del proceso:
 
 ```
 Entity RuntimeConfig   { core_address, token_file, health_port, channels: {platform: [ChannelAccount]},
@@ -241,8 +241,8 @@ Códigos de error de entrega (`ErrorInfo.code`): `ACCOUNT_NOT_CONFIGURED`, `CHAN
 
 ## Open Questions
 - [ ] Resultado de la fase 0: punto de integración elegido (plugin de harness u otro) y qué subsistemas se eliminan. Puede ajustar el alcance de esta spec.
-- [ ] Bun frente al fork (requisito 4bis): viabilidad de bun como gestor y como runtime, y cómo se integra el workspace `pnpm` interno de OpenClaw con el workspace raíz de bun.
-- [ ] Biblioteca de gRPC y generador de código TypeScript (candidato: `@grpc/grpc-js` con stubs generados); confirmar que soporta streaming bidireccional con la versión de Node fijada y actualizar la spec 01 con el plugin de `buf`.
+- [ ] Bun frente al fork (requisito 4bis): viabilidad de Bun como runtime y como gestor, compatibilidad del streaming gRPC bidireccional con `node:http2` bajo Bun, y cómo se integra el workspace `pnpm` interno de OpenClaw con el workspace raíz.
+- [ ] Biblioteca de gRPC y generador de código TypeScript (candidato: `@grpc/grpc-js` con stubs generados); confirmar que soporta streaming bidireccional con la versión de Bun fijada (y con Node 22 si se cae al fallback) y actualizar la spec 01 con el plugin de `buf`.
 - [x] Política de seguimiento de OpenClaw: confirmada. Sin cadencia fija; solo ante un
       disparador concreto (CVE público o canal roto). Reemplaza la propuesta mensual.
 - [x] Verificación de identidad ampliada: la revalidación del núcleo (requisito 13, ver

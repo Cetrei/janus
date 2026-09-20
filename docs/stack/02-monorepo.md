@@ -96,7 +96,7 @@ packages/                  # TypeScript
 
 proto/                     # Agnóstico de lenguaje — fuente de verdad del modelo
                             # semántico.
-  janus/
+  janus_proto/
     v1/
       common.proto         # Payload, Artifact, ErrorInfo (spec 01).
       semantic.proto       # SemanticRequest, SemanticResponse, tipos base.
@@ -105,7 +105,7 @@ proto/                     # Agnóstico de lenguaje — fuente de verdad del mod
       session.proto  channel.proto  spoke.proto  gateway.proto  # spec 01
   buf.yaml                 # Config de buf: lint + breaking change detection.
   buf.gen.yaml              # Config de generación: qué plugin genera qué, hacia
-                            # dónde (libs/proto-py/, y futuros packages/*
+                            # dónde (libs/proto-py/src/, y futuros packages/*
                             # o crates/* si un SDK en otro lenguaje lo requiere).
 
 config/
@@ -147,11 +147,24 @@ Reglas comunes:
 Puntos abiertos de esta sección, todos en la fase 0 de sus specs:
 
 * **Bun frente al fork de OpenClaw** (spec 14): OpenClaw es un workspace `pnpm` propio que
-  exige Node 22. Bun es la decisión del usuario para el resto, pero hay que verificar que
-  el fork instala, compila y arranca con bun, si el runtime del proceso sigue siendo Node
-  o pasa a ser Bun, y cómo convive su workspace interno con el workspace raíz.
+  exige Node 22. Bun es la decisión del usuario como gestor y como runtime; hay que
+  verificar que el fork instala, compila y arranca con Bun, que el streaming gRPC
+  bidireccional del puente funciona bajo Bun, y cómo convive su workspace interno con el
+  workspace raíz. Si algo falla bajo Bun, ese proceso corre con Node 22 (ver 3.1), sin
+  más decisión.
 * **`crates/gui-automation` en dos workspaces** (spec 12): validar en el spike que un
   mismo directorio sea miembro de Cargo y de uv sin fricción.
+
+### 3.1 Runtimes y servidores
+
+Regla fijada por el usuario (2026-09-20): cada ecosistema usa el runtime o servidor
+robusto y rápido que es estándar de facto en él.
+
+| Ecosistema | Ejecución | Detalle |
+|---|---|---|
+| Python | `uvicorn` | Servidor ASGI de toda superficie HTTP de una app (hoy, el transporte HTTP del servidor MCP de `core-gateway`), lanzado por la propia app dentro de su event loop. gRPC usa `grpc.aio` en ese mismo loop y no pasa por uvicorn. Las librerías de `libs/` no se ejecutan solas: las importa una app. |
+| TypeScript | Bun | Gestor de paquetes y de workspaces, y runtime por defecto de todo `apps/` y `packages/` de TypeScript. Un paquete que necesite una versión concreta de Node la declara en su `package.json` (`engines.node`) y en un `.node-version` propio, y su comando de arranque lanza `node` en vez de `bun` (para `channel-gateway`, `harnesses.channel-gateway.command` en `janus.toml`). Bun no instala ni gestiona versiones de Node: de eso se encarga una herramienta externa (`mise`, `fnm` o similar). No se asume que Bun haga cumplir `engines`; el control real está en el comando de arranque. |
+| Rust | Cargo | Compila y prueba; los binarios se despliegan ya compilados (`cargo build --release`). Los crates con binding PyO3 se construyen con maturin. |
 
 ---
 
@@ -176,9 +189,10 @@ Reglas:
 * Crates con binding PyO3: el paquete de Cargo es `janus-gui-automation` y el módulo de
   Python es `janus_gui`, tal como fija la spec 12.
 * Los paquetes de TypeScript son internos: llevan `private: true` y no se publican en npm.
-* Excepción dictada por la ruta de los `.proto`: el código generado vive en el namespace
-  `janus.v1` (spec 01), con fachada `janus_proto`. Ese namespace tiene un riesgo de
-  colisión con un paquete de PyPI, descrito en la spec 01 (Open Questions).
+* Excepción dictada por la ruta de los `.proto` (spec 01): el código generado de protobuf
+  vive dentro del paquete `janus_proto` como `janus_proto.v1`, con el paquete proto y su
+  directorio `proto/janus_proto/v1/`. No existe ningún módulo de nivel superior `janus`,
+  porque ese nombre lo ocupa otra librería de PyPI.
 
 ---
 

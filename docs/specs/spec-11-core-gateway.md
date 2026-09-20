@@ -1,7 +1,7 @@
 # Feature Spec: apps/core-gateway/ (Core de Traducción, orquestador central y superficie de control)
 
 > **Status**: Ready for implementation
-> **Last updated**: 2026-09-19
+> **Last updated**: 2026-09-20
 > **Orden de implementación**: 11 de 15. Depende de: specs 01 a 07, 09 y 10. Los adaptadores concretos (spec 15) y `channel-gateway` (spec 14) se conectan a este proceso.
 
 ---
@@ -35,6 +35,7 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
 5. gRPC (`grpc.aio`) con `SpokeGateway`, `ChannelBridge`, `Control` y `Observe` (spec 01), enlazados a `core.bind_host` y `core.grpc_port`. El `AuthInterceptor` (spec 05) protege todos los métodos con el mapa `metodo -> scope`.
 6. Servidor MCP (SDK oficial de Python) en `core.mcp_port` para los spokes que son clientes MCP: publica como tools las capacidades del registro a las que el token del cliente tiene acceso y traduce cada `call_tool` a una solicitud semántica. El spoke cree que habla con un servidor MCP normal (`architecture/03` sección 2.1). El nombre de tool se deriva del `capability_id` con una función reversible y se verifica en la implementación contra las reglas de nombres del protocolo.
 7. Ningún servidor escucha fuera de loopback salvo `allow_non_loopback = true` (spec 02).
+7bis. `uvicorn` es el servidor ASGI de todas las superficies HTTP del núcleo (hoy, el transporte HTTP del servidor MCP del requisito 6). Se lanza de forma programática (`uvicorn.Server(...).serve()` como una tarea más del mismo event loop que `grpc.aio`), enlazado a `core.bind_host`, y el manejo de señales es del núcleo (requisito 2), no de uvicorn. Se instala con el extra `standard` (uvloop y httptools) donde existan wheels para la plataforma. gRPC no pasa por uvicorn.
 
 ### Adaptadores y puerto al núcleo
 8. `AdapterManager` construye un `AdapterSpec` por cada entrada de `spokes`, llama `load_adapter` (spec 04), arranca los adaptadores en paralelo con aislamiento de fallos y registra sus capacidades en el `Registry` con `source = config`. Un `AdapterLoadError` deja ese spoke fuera y se informa; los demás siguen.
@@ -174,6 +175,11 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
 * **Rejected alternatives**: enum estático `on_dependency_failure` (`BLOCK` | `CANCEL` |
   `RETRY_REASSIGN`), propuesta original de esta spec, insuficiente por la misma razón
   que se descartó en spec 09.
+
+### `uvicorn` como servidor ASGI
+* **Chosen**: `uvicorn` sirve las superficies HTTP del núcleo, lanzado por el propio núcleo dentro de su event loop.
+* **Reason**: decisión del usuario: runtimes y servidores robustos y rápidos por ecosistema (`stack/02` sección 3.1). uvicorn es el servidor ASGI de referencia y lo que usa el ecosistema de Starlette sobre el que corre el transporte HTTP del SDK de MCP.
+* **Rejected alternatives**: dejar que el SDK de MCP elija y arranque su propio servidor (sin control de versión ni de señales); `hypercorn` o `granian` (sin ventaja que justifique salir del estándar de facto).
 
 ### Pausa como cancelación más reanudación
 * **Chosen**: no hay pausa a mitad de una llamada externa.
@@ -329,7 +335,7 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
       biometría de la pregunta 14 de `architecture/09` (sin spec propia aún).
 - [ ] Concurrencia interna de Janus (pregunta 9 de `architecture/09`, confirmado como requisito): Janus debe atender múltiples `SESSION_KIND_JANUS_MAIN` de distintos canales del mismo usuario en paralelo, sin serializar una detrás de otra. Falta el diseño concreto: si cada sesión principal corre en su propia task de asyncio de forma independiente, qué recursos compartidos (memoria, persistencia, toolset) requieren lock y cuáles no.
 - [ ] Nombre de tool MCP derivado de `capability_id`: verificar caracteres admitidos por el SDK de MCP al implementar.
-- [ ] Servidor ASGI del transporte HTTP del servidor MCP: el usuario mencionó `uvicorn` como parte del stack de Python. Confirmar al implementar que es el servidor que usa el SDK de MCP (o fijarlo explícitamente) y su versión. gRPC usa `grpc.aio` y no pasa por uvicorn.
+- [x] Servidor ASGI del transporte HTTP del servidor MCP: decidido, `uvicorn` (requisito 7bis). Por verificar al implementar: que el SDK de MCP exponga su aplicación ASGI para montarla en un `uvicorn.Server` propio, que uvicorn no instale sus manejadores de señales (requisito 2) y que existan wheels aarch64 de `uvloop` y `httptools`.
 - [ ] Mapa `roles.<rol>.capability`: valores iniciales propuestos; ajustar con el uso real.
 - [ ] Alcance de `Watch` y de los eventos de estado: refinar cuando exista la GUI.
 

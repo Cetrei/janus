@@ -81,6 +81,15 @@ confirme (el detalle y la tabla completa están en `docs/specs/README.md`):
 - [x] Workspaces: uno por ecosistema, `uv` (Python), Cargo (Rust) y bun (TypeScript), cada
       uno con su lockfile en la raíz (`stack/02` sección 3). Confirmado. Bun frente al fork
       de OpenClaw queda como verificación de la fase 0 de la spec 14.
+- [x] Runtimes: `uvicorn` para las superficies HTTP de Python, Bun como runtime y gestor
+      de TypeScript, Cargo para Rust (`stack/02` sección 3.1). Confirmado. Bun frente al
+      fork y al streaming gRPC bidireccional queda como verificación de la fase 0 de la
+      spec 14. Si falla, `channel-gateway` corre con Node 22 (`engines.node`,
+      `.node-version` y un `command` que lanza `node`); camino aprobado por el usuario.
+- [x] Colisión del namespace `janus` con el paquete de PyPI: resuelta renombrando el
+      paquete proto a `janus_proto.v1` (spec 01).
+- [x] `DependencyFailurePolicy` eliminado de `task.proto` (spec 01) y de la tabla `tasks`
+      (spec 03): lo reemplaza `DependencyFailureTriage` de la pregunta 10 (spec 11).
 - [x] Selección entre spokes (residual de la pregunta 1, spec 09): salud, luego
       política del usuario, luego rol solo para desempatar candidatos equivalentes.
       Ante un fallo, se maneja con una `FallbackChain` declarativa que el usuario
@@ -187,9 +196,9 @@ specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
 - [ ] Diferido a la implementación: medir `multilingual-e5-large` (CPU y CUDA) en la PC
       del usuario y recalibrar el umbral de deduplicación de memoria y los objetivos de
       latencia (specs 07 y 10).
-- [ ] Resolver la colisión entre el namespace `janus` del código generado de protobuf y el
-      paquete `janus` de PyPI (spec 01, Open Questions). Hay que decidirlo antes de generar
-      código por primera vez.
+- [x] `CODING_STANDARDS.md` reconciliado con las specs: convención nativa de cada
+      lenguaje (`snake_case` en Python y Rust, `camelCase` en TypeScript), decidido por el
+      usuario. Las specs no cambian.
 - [ ] Crear kanban (GitHub Projects u otra herramienta) a partir de las specs ya
       escritas: cada spec se descompone en tareas concretas, no al revés. Las fases 0
       (auditorías y spikes de las specs 8, 10, 12 y 14) son tareas explícitas.
@@ -214,5 +223,4 @@ specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
 ## Próximo paso inmediato
 
 Las specs están completas y todas las decisiones de la sección 2 quedaron confirmadas.
-Antes de implementar hay que resolver la colisión de namespace con PyPI (sección 4). El
-siguiente paso es armar el kanban desde las specs.
+El siguiente paso es armar el kanban desde las specs.

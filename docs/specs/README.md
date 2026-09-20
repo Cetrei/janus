@@ -43,6 +43,9 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 | Ubicación de agentes: `config/agents/<Nombre>/`; catálogo compartido en `config/catalog/` | 02 | Confirmada (resuelve 1.6 del TODO) |
 | Paquetes con prefijo `janus` en todos los lenguajes (`janus_*` en Python, `janus-*` en Rust, `@janus/*` en TypeScript); Python 3.11 o superior | 02, 04 | Confirmada (ver `stack/02` sección 4) |
 | Un workspace por ecosistema: `uv` (Python), Cargo (Rust) y bun (TypeScript), cada uno con su lockfile en la raíz | todas | Confirmada (ver `stack/02` sección 3). Bun frente al fork de OpenClaw, por validar en la fase 0 de la spec 14 |
+| Runtimes por ecosistema: `uvicorn` (Python, superficies HTTP), Bun (TypeScript, runtime y gestor), Cargo (Rust) | 11, 14 | Confirmada (ver `stack/02` sección 3.1). Bun frente al fork de OpenClaw y al streaming gRPC, por validar en la fase 0 de la spec 14 |
+| Paquete proto `janus_proto.v1` (directorio `proto/janus_proto/v1/`), sin namespace `janus`, que colisiona con un paquete de PyPI | 01 | Decidido en la spec |
+| `DependencyFailurePolicy` eliminado de `task.proto` y de la tabla `tasks` (lo reemplaza `DependencyFailureTriage`, spec 11) | 01, 03 | Corrección de una inconsistencia con la pregunta 10 |
 | Extensión de `proto/` con 5 archivos más (`common`, `session`, `channel`, `spoke`, `gateway`) | 01 | Decidido en la spec |
 | Código generado de protobuf commiteado al repo (las remote plugins de buf requieren red) | 01 | Decidido en la spec |
 | Tokens: `jns_<id>.<secret>`, SHA 256 con sal (no KDF lento) | 05 | Decidido en la spec |
@@ -70,7 +73,7 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 * Raspberry Pi OS usa Wayland (`labwc`) por defecto; la automatización de GUI no puede asumir X11 (spec 12).
 * Las remote plugins de `buf` exigen conexión con la BSR; de ahí el código generado commiteado (spec 01).
 * `sqlite-vec` es pre v1 (0.1.x) y hubo problemas con wheels aarch64 en versiones previas (specs 03 y 07).
-* Existe un paquete `janus` en PyPI (cola sync/async de aio-libs) cuyo módulo `janus` colisiona con el namespace package `janus` del código generado de protobuf (spec 01).
+* Existe un paquete `janus` en PyPI (cola sync/async de aio-libs) cuyo módulo `janus` colisionaría con un namespace `janus` propio. Se evitó nombrando el paquete proto `janus_proto.v1` (spec 01).
 * `intfloat/multilingual-e5-small` no figura en la lista integrada de modelos de `fastembed` (se registra con `TextEmbedding.add_custom_model`), y la spec 07 afirmaba lo contrario. `intfloat/multilingual-e5-large` (1024 dimensiones) sí figura, y `fastembed` corrigió su pooling (PR 445), así que hay que fijar una versión que lo incluya. La GPU exige el paquete aparte `fastembed-gpu` (specs 02 y 07).
 
 ## Cómo usar estas specs
@@ -87,6 +90,8 @@ El stack no las fija; se proponen para que las specs sean coherentes entre sí:
 
 * Python 3.11 o superior, un workspace de `uv` con un solo `uv.lock`, `ruff`, `mypy` o `pyright`, `pytest` con `pytest-asyncio` e `import-linter` para los contratos de dependencia.
 * Rust estable, un workspace de Cargo, `clippy -D warnings`, `cargo audit` y `cargo deny`.
-* Node 22 o superior como runtime del fork de OpenClaw, con workspaces de bun para `packages/` y `apps/channel-gateway` (bun frente al fork, por validar en la spec 14).
+* Bun como runtime y gestor de paquetes de TypeScript, con workspaces para `packages/` y `apps/channel-gateway` (Bun frente al fork de OpenClaw, por validar en la spec 14). Un paquete que necesite Node lo declara con `engines.node` y `.node-version` y lo lanza con `node`; para `channel-gateway` ese camino ya está aprobado.
+* `uvicorn` como servidor de toda superficie HTTP de Python.
+* Los estándares de código para contribuidores están en `CODING_STANDARDS.md` (raíz del repositorio). Nombres con la convención nativa de cada lenguaje (`snake_case` en Python y Rust, `camelCase` en TypeScript), coherente con estas specs.
 * Todo objetivo numérico de rendimiento es una propuesta que se ajusta tras medir en el hardware objetivo.
 * Ninguna spec usa MVC: el proyecto es un sistema de librerías y servicios por capas con puertos (`Protocol`) entre ellas, y esa estructura ya cubre la separación de responsabilidades que MVC buscaría. Ver la nota en `../../TODO.md`.

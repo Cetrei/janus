@@ -1,7 +1,7 @@
 # Feature Spec: proto/ y libs/proto-py/ (modelo semántico compartido)
 
 > **Status**: Ready for implementation
-> **Last updated**: 2026-09-19
+> **Last updated**: 2026-09-20
 > **Orden de implementación**: 1 de 15. Todas las demás specs dependen de esta.
 
 ---
@@ -24,8 +24,8 @@ Alcance: mensajes, enums, servicios y tooling de generación. No incluye lógica
 ### Layout y tooling
 1. Existe `proto/buf.yaml` (versión v2) con módulo único, lint `STANDARD` y breaking `FILE`.
 2. Existe `proto/buf.gen.yaml` que genera hacia `libs/proto-py/src/`. TypeScript se agrega cuando la spec 14 lo requiera (`packages/proto-ts/`).
-3. Los `.proto` viven en `proto/janus/v1/` con estos archivos: `common.proto`, `semantic.proto`, `capability.proto`, `task.proto`, `session.proto`, `channel.proto`, `spoke.proto`, `gateway.proto`. (`stack/02` nombraba tres; los otros cinco son una extensión documentada aquí.)
-4. El paquete proto es `janus.v1`. Un cambio incompatible exige un paquete `janus.v2`, nunca editar `v1` en sitio.
+3. Los `.proto` viven en `proto/janus_proto/v1/` con estos archivos: `common.proto`, `semantic.proto`, `capability.proto`, `task.proto`, `session.proto`, `channel.proto`, `spoke.proto`, `gateway.proto`. (`stack/02` nombraba tres; los otros cinco son una extensión documentada aquí.)
+4. El paquete proto es `janus_proto.v1`. Un cambio incompatible exige un paquete `janus_proto.v2`, nunca editar `v1` en sitio.
 5. Reglas de esquema: todo enum inicia en `*_UNSPECIFIED = 0` con valores prefijados por el nombre del enum (exigencia de lint); campos eliminados se marcan `reserved`; nunca se reutiliza un número de campo.
 6. `buf lint` y `buf breaking --against '.git#branch=main,subdir=proto'` corren en CI y bloquean el merge.
 
@@ -34,7 +34,7 @@ Alcance: mensajes, enums, servicios y tooling de generación. No incluye lógica
 8. Los plugins de generación son los de la BSR con versión fijada explícitamente: `buf.build/protocolbuffers/python`, `buf.build/protocolbuffers/pyi` y `buf.build/grpc/python`. Las versiones se anclan en `buf.gen.yaml` y deben ser compatibles con el rango de `protobuf` y `grpcio` declarado en `pyproject.toml` (el código generado exige un runtime igual o más nuevo que el generador).
 9. El código generado se commitea al repositorio. Motivo: las remote plugins de buf se ejecutan en servidores de la BSR y exigen red; el build en el Raspberry Pi y los checkouts sin red no pueden depender de ello. CI regenera y falla si hay diff (`buf generate && git diff --exit-code`).
 10. Fallback offline documentado en `proto/README.md`: `python -m grpc_tools.protoc` (paquete `grpcio-tools`) con `--python_out`, `--pyi_out` y `--grpc_python_out`, apuntando al mismo árbol de salida.
-11. El código generado queda bajo `libs/proto-py/src/janus/v1/` como namespace package (sin `janus/__init__.py`), porque los imports generados son absolutos (`from janus.v1 import ...`).
+11. El código generado queda bajo `libs/proto-py/src/janus_proto/v1/`, dentro del mismo paquete `janus_proto` que la fachada, porque los imports generados son absolutos y siguen la ruta del `.proto` (`from janus_proto.v1 import ...`). Solo `v1/` es generado; `__init__.py`, `helpers.py` y `capability_ids.py` se escriben a mano y `buf generate` no debe borrarlos (la salida no usa `clean: true`). No existe ningún paquete de nivel superior llamado `janus`: ese nombre lo ocupa otra librería de PyPI y un namespace propio colisionaría con ella (ver Technical Decisions).
 12. `janus_proto` re-exporta los tipos más usados (`SemanticRequest`, `SemanticEvent`, `SemanticResponse`, `CapabilityDescriptor`, `InboundEvent`, enums) y añade `janus_proto.helpers` y `janus_proto.capability_ids`.
 13. `janus_proto.helpers` provee: `progress_event`, `partial_event`, `terminal_event(request, response)` (copian `request_id`, `session_id`, `task_id`, `role` del request), `is_terminal(event)` y `new_request_id()` (UUID v4 hex).
 14. `janus_proto.capability_ids` define constantes de los namespaces reservados: `reasoning.complete`, `execution.run_task`, `channel.deliver`, `gui.window.control`, `gui.elements.map`, `voice.tts.synthesize`, `voice.stt.transcribe`, `memory.recall`. Los namespaces de primer nivel `reasoning`, `execution`, `channel`, `gui`, `voice`, `memory`, `janus` están reservados al núcleo. Un tercero usa cualquier otro namespace, siempre abstracto: un id de capacidad nunca incluye el nombre de un spoke (Principio #1).
@@ -66,10 +66,10 @@ Alcance: mensajes, enums, servicios y tooling de generación. No incluye lógica
 * **Reason**: `stack/04` ya fija buf. Las remote plugins evitan instalar toolchains de plugins, pero requieren la BSR. Commitear la salida elimina esa dependencia en tiempo de build.
 * **Rejected alternatives**: generar en cada build (rompe builds sin red y en el Pi); solo `grpcio-tools` (no cubre TypeScript ni Rust con el mismo flujo, aunque queda como fallback).
 
-### Namespace package `janus` para el código generado
-* **Chosen**: salida en `src/janus/v1/` sin `__init__.py`, más fachada `janus_proto`.
-* **Reason**: el generador de Python emite imports absolutos basados en la ruta del `.proto`. Renombrar rutas rompería la convención `proto/janus/v1` de `stack/02`.
-* **Rejected alternatives**: reescribir imports con post proceso (frágil); mover los `.proto` a `janus_proto/v1` (contradice `stack/02`).
+### Paquete proto `janus_proto.v1`, sin namespace de nivel superior `janus`
+* **Chosen**: el paquete proto y su directorio se llaman `janus_proto.v1` (`proto/janus_proto/v1/`). El código generado vive en `libs/proto-py/src/janus_proto/v1/`, junto a la fachada `janus_proto`, en un solo paquete Python normal.
+* **Reason**: PyPI tiene un paquete `janus` (cola mixta sync/async de aio-libs, mantenido y muy usado) que instala el módulo `janus`. Un namespace `janus` propio se pisaría con él si alguna dependencia lo trae al mismo entorno. Con `janus_proto` el nombre coincide con la regla de prefijos de `stack/02` sección 4, no hay trucos de namespace y el código generado y la fachada conviven en un solo lugar. Como no hay código ni versiones publicadas, renombrar ahora no cuesta nada; después sería un cambio incompatible. Costo aceptado: los nombres de servicio en el cable pasan a ser `/janus_proto.v1.<Servicio>/<Método>`.
+* **Rejected alternatives**: mantener `janus.v1` como namespace package (colisiona con el paquete de PyPI); reescribir imports con post proceso (frágil); dejar `package janus.v1` en los `.proto` y solo mover la carpeta (viola `PACKAGE_DIRECTORY_MATCH` de `buf lint` y deja dos nombres para lo mismo); excluir el paquete de PyPI con overrides de `uv` (protege solo a este workspace, no a quien instale Janus junto a otras librerías).
 
 ### Un servicio `SpokeEndpoint` implementado por el spoke, no un stream inverso
 * **Chosen**: el spoke nativo que habla gRPC expone `SpokeEndpoint.Invoke` y se registra con su dirección.
@@ -87,8 +87,8 @@ Alcance: mensajes, enums, servicios y tooling de generación. No incluye lógica
 ### Component Diagram
 ```mermaid
 flowchart TD
-    P[proto/janus/v1/*.proto] -->|buf lint + breaking| CI[CI]
-    P -->|buf generate| G[libs/proto-py/src/janus/v1 generado]
+    P[proto/janus_proto/v1/*.proto] -->|buf lint + breaking| CI[CI]
+    P -->|buf generate| G[libs/proto-py/src/janus_proto/v1 generado]
     G --> F[janus_proto fachada + helpers]
     F --> AD[libs/adapters]
     F --> CAP[libs/capabilities]
@@ -103,18 +103,18 @@ proto/
   buf.yaml
   buf.gen.yaml
   README.md                  # regeneración, fallback offline, política de versionado
-  janus/v1/
+  janus_proto/v1/
     common.proto  semantic.proto  capability.proto  task.proto
     session.proto channel.proto   spoke.proto       gateway.proto
 libs/proto-py/
   pyproject.toml
   src/
-    janus/v1/                # generado (namespace package, sin __init__.py)
     janus_proto/
-      __init__.py            # re-exports y alias de enums
-      helpers.py
-      capability_ids.py
+      __init__.py            # re-exports y alias de enums (escrito a mano)
+      helpers.py             # escrito a mano
+      capability_ids.py      # escrito a mano
       py.typed
+      v1/                    # generado por buf, sin tocar a mano
   tests/
 ```
 
@@ -179,12 +179,9 @@ message CapabilityDescriptor {
 enum TaskStatus { TASK_STATUS_UNSPECIFIED = 0; TASK_STATUS_PENDING = 1; TASK_STATUS_RUNNING = 2;
                   TASK_STATUS_BLOCKED = 3; TASK_STATUS_COMPLETED = 4; TASK_STATUS_FAILED = 5;
                   TASK_STATUS_CANCELLED = 6; }
-enum DependencyFailurePolicy { DEPENDENCY_FAILURE_POLICY_UNSPECIFIED = 0;
-  DEPENDENCY_FAILURE_POLICY_BLOCK = 1; DEPENDENCY_FAILURE_POLICY_CANCEL = 2;
-  DEPENDENCY_FAILURE_POLICY_RETRY_REASSIGN = 3; }
-message TaskSpec {
+message TaskSpec {   // la cascada ante una dependencia fallida no es un campo: la decide Janus en runtime (spec 11, requisito 20)
   string title = 1; string role = 2; string session_id = 3; repeated string depends_on = 4;
-  Payload input = 5; DependencyFailurePolicy on_dependency_failure = 6; map<string,string> labels = 7;
+  Payload input = 5; map<string,string> labels = 6;
 }
 message Task {
   string task_id = 1; TaskSpec spec = 2; TaskStatus status = 3; optional string assigned_spoke_id = 4;
@@ -311,9 +308,9 @@ Errores gRPC: `UNAUTHENTICATED` (token ausente o inválido), `PERMISSION_DENIED`
 
 ## Open Questions
 - [ ] Versiones exactas de los plugins de la BSR y de `protobuf`/`grpcio`: fijarlas al implementar, verificando compatibilidad de gencode con el runtime.
-- [ ] **Colisión de namespace con PyPI**: existe el paquete `janus` (cola mixta sync/async de aio-libs, mantenido y muy usado) que instala el módulo `janus`, el mismo nombre que el namespace package `janus` del código generado (`janus/v1`). Si alguna dependencia lo trae al mismo entorno, ambos se pisan. Verificar al implementar que ninguna dependencia del workspace lo instale, y decidir si se renombra el paquete proto (por ejemplo `janusproto.v1`) antes de generar código por primera vez, porque después de publicar `v1` cambiarlo es un cambio incompatible.
+- [x] Colisión de namespace con PyPI: resuelta. El paquete proto pasa a ser `janus_proto.v1` y no existe ningún módulo de nivel superior `janus` (ver Technical Decisions). Al implementar, verificar de todos modos que ninguna dependencia del workspace instale el paquete `janus` de PyPI, aunque ya no colisione.
 - [ ] Confirmar `Connect` (`@connectrpc/connect-node`, transporte gRPC) o `@grpc/grpc-js` para TypeScript en la spec 14.
-- [ ] Confirmar que `RETRY_REASSIGN` se conserva como valor de `DependencyFailurePolicy` (pregunta 10 de `architecture/09`; ver spec 11).
+- [x] `DependencyFailurePolicy` eliminado del esquema: la pregunta 10 de `architecture/09` lo reemplazó por `DependencyFailureTriage`, un juicio de Janus en runtime (spec 11, requisito 20). `TaskSpec` ya no tiene `on_dependency_failure`.
 
 ---
 

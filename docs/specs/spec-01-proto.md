@@ -47,6 +47,7 @@ Alcance: mensajes, enums, servicios y tooling de generación. No incluye lógica
 
 ### Servicios gRPC
 19. Se definen cuatro servicios en `gateway.proto` y uno en `spoke.proto`, con las firmas de la sección "API Contracts". Su comportamiento se especifica en la spec 11 (core) y la spec 14 (channel-gateway).
+19bis. `TaskChecklistItem` y `required` (requisito 15) sostienen el aviso selectivo a Janus resuelto en spec 11 (requisito 22bis): marcar un ítem del checklist es una operación barata que no involucra a Janus; solo `task_finalize` (tool expuesta al subagente, no un RPC de este documento; su contrato de comportamiento vive en spec 11) puede despertar un turno de Janus, y solo según la regla de esa spec.
 
 ---
 
@@ -179,9 +180,15 @@ message CapabilityDescriptor {
 enum TaskStatus { TASK_STATUS_UNSPECIFIED = 0; TASK_STATUS_PENDING = 1; TASK_STATUS_RUNNING = 2;
                   TASK_STATUS_BLOCKED = 3; TASK_STATUS_COMPLETED = 4; TASK_STATUS_FAILED = 5;
                   TASK_STATUS_CANCELLED = 6; }
+message TaskChecklistItem {   // sub item de una tarea; no es una tarea propia ni participa de task_deps
+  string item_id = 1; string label = 2; bool done = 3;
+  optional google.protobuf.Timestamp done_at = 4;
+}
 message TaskSpec {   // la cascada ante una dependencia fallida no es un campo: la decide Janus en runtime (spec 11, requisito 20)
   string title = 1; string role = 2; string session_id = 3; repeated string depends_on = 4;
   Payload input = 5; map<string,string> labels = 6;
+  repeated TaskChecklistItem checklist = 7;   // marcado por el propio subagente via tool, no dispara turno de Janus
+  bool required = 8;   // avisar a Janus al completarse aunque no tenga dependientes en task_deps (spec 11, requisito 22bis)
 }
 message Task {
   string task_id = 1; TaskSpec spec = 2; TaskStatus status = 3; optional string assigned_spoke_id = 4;
@@ -286,6 +293,7 @@ Errores gRPC: `UNAUTHENTICATED` (token ausente o inválido), `PERMISSION_DENIED`
 | `SemanticEvent` terminal sin `response` | Inválido. `libs/adapters` lo convierte en `SpokeProtocolError`. |
 | Build en un host sin red | Usa el código commiteado. Solo regenerar exige red o el fallback `grpcio-tools`. |
 | Un `capability_id` con nombre de spoke | Rechazado por el validador de `libs/capabilities` (spec 09) al registrar. |
+| `TaskChecklistItem.done_at` sin `done = true` | Inválido; `core-gateway` lo rechaza al aplicar el marcado (spec 11). |
 
 ---
 

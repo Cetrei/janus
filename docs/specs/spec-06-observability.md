@@ -1,7 +1,7 @@
 # Feature Spec: libs/observability/ (logging estructurado, ring buffer y Redis pub/sub)
 
 > **Status**: Ready for implementation
-> **Last updated**: 2026-09-19
+> **Last updated**: 2026-09-20
 > **Orden de implementación**: 6 de 15. Depende de: spec 02 (configuración, solo por parámetros, sin importarla).
 
 ---
@@ -34,7 +34,7 @@ Una vez implementada, cualquier cliente (una GUI futura, una CLI) se suscribe al
 
 ### Eventos de estado (`architecture/07` sección 3)
 11. `EventPublisher` (ABC) con `publish(event: StateEvent)`. Implementaciones: `RedisEventPublisher` y `InMemoryEventPublisher` (fallback y pruebas).
-12. `StateEvent` tiene `kind` (`task.changed`, `session.changed`, `spoke.connected`, `spoke.disconnected`, `spoke.health`, `capability.changed`, `queue.changed`, `preference.changed`), `subject_id`, `payload` (dict serializable), `at`. La generación del evento es responsabilidad del núcleo; esta librería solo lo transporta.
+12. `StateEvent` tiene `kind` (`task.changed`, `task.subitem_changed`, `session.changed`, `spoke.connected`, `spoke.disconnected`, `spoke.health`, `capability.changed`, `queue.changed`, `preference.changed`), `subject_id`, `payload` (dict serializable), `at`. La generación del evento es responsabilidad del núcleo; esta librería solo lo transporta. `task.subitem_changed` es deliberadamente distinto de `task.changed`: se emite al marcar un ítem del checklist de una tarea (spec 03, requisito 25) y nunca implica una transición de `TaskStatus` ni pasa por la lógica de aviso a Janus (spec 11, requisito 22bis); existe solo para que un consumidor de `Observe.Watch` (por ejemplo, una GUI futura) refleje el progreso de los checkboxes en tiempo real sin que esto le cueste nada a Janus.
 
 ### Métricas mínimas
 13. Contadores en memoria consultables (`get_counters()`): líneas por nivel, líneas descartadas por suscriptor lento, fallos de publicación Redis, tamaño actual del ring buffer.
@@ -163,7 +163,7 @@ Sin autenticación propia: se apoya en la de Redis (requirepass o red loopback)
 ---
 
 ## Open Questions
-- [ ] Nivel de detalle de los eventos de estado que la GUI futura necesitará (se refinan con la spec 11).
+- [x] Nivel de detalle para el progreso de checklists de tarea: resuelto, evento propio `task.subitem_changed` separado de `task.changed` (requisito 12, spec 11 requisito 22bis). El nivel de detalle para el resto de los eventos de estado se sigue refinando con el uso real de la spec 11.
 - [ ] Política de retención de archivos de log (propuesta: 5 copias de 10 MiB, ajustable).
 
 ---

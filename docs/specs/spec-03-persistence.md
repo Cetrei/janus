@@ -39,7 +39,7 @@ Una vez implementada, `core-gateway` (único proceso escritor) persiste todo el 
 14. `0001_init.sql`: `schema_migrations`, `preferences(key PK, value_json, updated_at)`.
 15. `0002_registry.sql`: `spokes(spoke_id PK, display_name, kinds_json, source CHECK IN ('config','dynamic'), adapter_path, endpoint, enabled, health_state, health_reason, retry_after, last_seen)` y `capabilities(capability_id, spoke_id FK, descriptor_json, PRIMARY KEY(capability_id, spoke_id))`.
 16. `0003_sessions.sql`: `sessions(session_id PK, kind, agent_name, task_id NULL, status CHECK IN ('open','closed'), engine_session_ref, created_at, closed_at)` y `session_participants(session_id FK, participant_id, kind CHECK IN ('janus','agent','user_listener'), channel_ref, joined_at, left_at, PRIMARY KEY(session_id, participant_id, joined_at))`. Índice parcial sobre `left_at IS NULL`.
-17. `0004_tasks.sql`: `tasks(task_id PK, session_id FK, role, title, status CHECK IN ('pending','running','blocked','completed','failed','cancelled'), assigned_spoke_id, input_json, result_json, status_reason, attempts, created_at, started_at, finished_at)`; `task_deps(task_id FK, depends_on_id FK, PRIMARY KEY(task_id, depends_on_id))` con índice B tree sobre `depends_on_id`; `task_assignments(task_id FK, spoke_id, assigned_at, unassigned_at, reason)` para trazabilidad de reasignaciones (`architecture/05` sección 3). La decisión ante una dependencia fallida no se persiste como política de la tarea: la toma Janus en runtime (spec 11, requisito 20) y queda registrada en `status_reason`.
+17. `0004_tasks.sql`: `tasks(task_id PK, session_id FK, role, title, status CHECK IN ('pending','running','blocked','completed','failed','cancelled'), assigned_spoke_id, input_json, result_json, status_reason, attempts, checklist_json, required, created_at, started_at, finished_at)`; `task_deps(task_id FK, depends_on_id FK, PRIMARY KEY(task_id, depends_on_id))` con índice B tree sobre `depends_on_id`; `task_assignments(task_id FK, spoke_id, assigned_at, unassigned_at, reason)` para trazabilidad de reasignaciones (`architecture/05` sección 3). La decisión ante una dependencia fallida no se persiste como política de la tarea: la toma Janus en runtime (spec 11, requisito 20) y queda registrada en `status_reason`. `checklist_json` guarda el arreglo de `TaskChecklistItem` (spec 01, requisito 15); `required` es el flag booleano independiente de `task_deps` que sostiene el aviso selectivo a Janus (spec 11, requisito 22bis). Ninguno de los dos participa de la detección de ciclos ni del planificador de dependencias.
 18. `0005_agent_queue.sql`: `agent_queue(seq INTEGER PRIMARY KEY AUTOINCREMENT, request_id UNIQUE, agent_type, agent_name, session_id, task_id, status CHECK IN ('queued','running','done','cancelled','failed'), enqueued_at, started_at, finished_at, status_reason)` con índice `(agent_type, status, seq)`. La cola es FIFO por carril: el orden lo define `seq`. Las solicitudes de Janus nunca se encolan (`agents/07` sección 3).
 19. `0006_tokens.sql`: `tokens(token_id PK, name, kind CHECK IN ('internal','external'), secret_hash, scopes_json, created_at, expires_at, revoked_at, last_used_at)`. El contrato de hashing lo fija la spec 05.
 20. `0007_memory.sql`: `memory_categories(level CHECK IN ('agent','global'), agent_name, category, description, created_at, PRIMARY KEY(level, agent_name, category))` y `memory_entries(entry_id PK, level, agent_name, category, content, embedding_model, embedding_dim, project_ref, source, created_at, updated_at)`. La categoría `profile` se siembra en la migración para el nivel global. La tabla virtual vectorial no vive en una migración numerada porque su dimensión depende del modelo de embeddings configurado (spec 07): se crea desde una plantilla con `Database.ensure_vec_table(dim)` (requisito 20bis).
@@ -50,6 +50,7 @@ Una vez implementada, `core-gateway` (único proceso escritor) persiste todo el 
 22. `agent_queue.enqueue`, `next_for_lane(agent_type)` (el más antiguo en `queued`), `mark_running`, `mark_done` y `count_running(agent_type)` permiten aplicar el tope por carril sin bloquear otros carriles.
 23. `tasks.load_graph(scope) -> dict[str, set[str]]` carga el subconjunto de grafo (por sesión o de todas las tareas abiertas) como diccionario de adyacencia para que `core-gateway` corra los algoritmos en memoria. El cómputo del grafo no ocurre en SQL (`stack/03` sección 4).
 24. `recover_after_crash()` marca como `failed` las filas de cola `running` y como `blocked` las tareas `running`, con motivo `interrupted_by_restart`, para que el núcleo decida reanudar o cancelar (ver spec 11).
+25. `tasks.mark_checklist_item(task_id, item_id, done: bool) -> Task` actualiza un ítem dentro de `checklist_json` en una transacción (lectura, modificación del arreglo en memoria, escritura) y fija o limpia `done_at`. No cambia `status` ni `status_reason` de la tarea: esta operación es deliberadamente ajena a la máquina de estados de la tarea (spec 11, requisito 22bis) y no requiere que la sesión de Janus se entere. `core-gateway` es responsable de emitir `task.subitem_changed` (spec 06) después de la escritura; el repositorio solo persiste.
 
 ---
 
@@ -135,7 +136,7 @@ libs/persistence/
 ```
 Entity Task        { task_id, session_id, role, title, status,
                      assigned_spoke_id?, input_json, result_json?, status_reason?, attempts,
-                     created_at, started_at?, finished_at? }
+                     checklist_json, required, created_at, started_at?, finished_at? }
 Entity TaskDep     { task_id, depends_on_id }                # arista dirigida
 Entity QueueEntry  { seq, request_id, agent_type, agent_name, session_id, task_id?, status,
                      enqueued_at, started_at?, finished_at?, status_reason? }
@@ -159,6 +160,7 @@ Database.connect(db_path: Path, load_vec: bool = False) -> Database
 Database.migrate() -> list[int]                      # versiones aplicadas
 Database.transaction() -> AsyncContextManager[Connection]
 tasks.create(db, spec) -> Task            tasks.load_graph(db, scope) -> dict[str, set[str]]
+tasks.mark_checklist_item(db, task_id, item_id, done: bool) -> Task
 agent_queue.enqueue(db, entry) -> int     agent_queue.next_for_lane(db, agent_type) -> QueueEntry | None
 sessions.close_if_idle(db, session_id) -> bool
 recover_after_crash(db) -> RecoveryReport

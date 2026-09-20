@@ -1,7 +1,7 @@
 # Feature Spec: crates/gui-automation/ (automatización de GUI en Rust con binding PyO3)
 
 > **Status**: Ready for implementation, con una fase 0 de validación técnica obligatoria (spike)
-> **Last updated**: 2026-09-19
+> **Last updated**: 2026-09-20
 > **Orden de implementación**: 12 de 15. Independiente del resto hasta la spec 15, que lo consume desde los adaptadores GUI.
 
 ---
@@ -67,6 +67,7 @@ Consecuencia: no existe una solución única y estable para todos los compositor
 20. `ScreenLock`: un lock global de input por pantalla, FIFO y con timeout, compartido por todo el proceso (y entre procesos con un archivo de lock en `state_dir/gui.lock`). Toda operación que enfoca o teclea lo adquiere. Resuelve el caso de varias instancias GUI que pelean por la única pantalla y el foco (spec 04, casos límite).
 21. Abortar: `AbortToken` cancela cualquier operación en curso en menos de 500 ms y libera el lock. Toda operación larga acepta un token. Límite de acciones por operación (default 200) y de duración total.
 22. Modo `dry_run`: registra lo que haría sin enviar input.
+22bis. **Aprobación por tipo de acción (confirmado por el usuario, 2026-09-20):** las operaciones de esta crate se dividen en solo lectura (`map_elements`, `read_text`, `find_window`, `probe`, cualquier captura) y mutación de estado (`type_text`, `press_key`, `click`, `activate`, `open_app`, `close_window`, `move_window`). Las de solo lectura no requieren aprobación. Las de mutación pasan por `ApprovalGateway` (spec 11, requisito 32) con los mismos cuatro valores ya definidos para el resto del sistema (`ask_everytime`, `ask_once_per_session`, `allow_always`, `deny_always`, `agents/06`), configurables por tipo de acción y por ámbito (sesión o global), no por la capacidad `gui.window.control`/`gui.elements.map` completa. La crate misma no implementa el gate (no tiene acceso al `ApprovalGateway`, que vive en `core-gateway`); el adaptador de spec 15 es responsable de invocarlo antes de llamar a cualquier función de mutación de `janus_gui`. Config nueva propuesta para `janus.toml`: `gui_automation.approval.<accion> = ask_everytime | ask_once_per_session | allow_always | deny_always` (spec 02).
 23. Privacidad: las capturas viven solo en memoria y no se escriben a disco salvo `debug_dump_dir` explícito; el texto leído y el OCR no se registran en logs completos.
 
 ### Binding Python
@@ -235,6 +236,7 @@ Excepciones: `PlatformUnsupported`, `WindowNotFound`, `FocusNotVerified`, `Inter
 ---
 
 ## Open Questions
+- [x] Política de aprobación para acciones de GUI automation: resuelto, `ApprovalGateway` existente aplicado por tipo de acción (lectura vs mutación), configurable por sesión o global (requisito 22bis).
 - [ ] Resultado del spike: qué entornos quedan soportados en la primera versión. Actualizar esta spec y `stack/10` al terminarlo.
 - [ ] Confirmar el compositor y el escritorio del equipo de desarrollo y del Raspberry Pi para elegir el primer backend de ventanas Wayland.
 - [ ] Biblioteca de respaldo por visión u OCR: se decide en el spike solo si el árbol de accesibilidad de la app objetivo no basta.

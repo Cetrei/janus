@@ -214,7 +214,7 @@ agente mediante `voice_provider` en `AgentPersona` (`agents/05-voz.md`).
 (`specs/spec-13-voice.md`), invocado por el núcleo como capacidad propia. Queda abierta
 la conversación dúplex en tiempo real, fuera del alcance de la primera versión.
 
-## 9. Modelo de multi-tenencia / multi-usuario — RESUELTA (redefinida como multi-sesión de un único dueño)
+## 9. Modelo de multi-tenencia / multi-usuario — RESUELTA (redefinida como multi-sesión de un único dueño; residual de concurrencia interna cerrado 2026-09-20)
 **No se había discutido en ningún documento anterior.**
 
 Toda la arquitectura descrita asume un único usuario dueño del sistema. La pregunta
@@ -239,14 +239,22 @@ preferencias entre "usuarios", porque sigue siendo un único dueño.
   agente líder que conversa directamente con el usuario, debe poder procesar más de
   una conversación/solicitud propia a la vez).
 
-**Residual nuevo, no cubierto por ningún documento existente:** `agents/07` fija que
-Janus está exento de todo tope de concurrencia y nunca hace cola, pero asume
-implícitamente que Janus procesa una interacción conversacional a la vez. Falta
-definir el modelo de concurrencia interna de Janus mismo (¿instancia única con
-manejo asíncrono de múltiples sesiones activas en paralelo, similar a como ya maneja
-múltiples sesiones con subagentes en `agents/04` sección 3? ¿o algo distinto?) para
-el caso de múltiples canales de entrada del mismo usuario. Se traslada a `/spec` de
-`apps/core-gateway` (spec 11) como requisito nuevo a incorporar.
+**Residual cerrado 2026-09-20:** `agents/07` fija que Janus está exento de todo tope de
+concurrencia y nunca hace cola, pero asumía implícitamente que Janus procesa una
+interacción conversacional a la vez. El diseño concreto quedó confirmado en
+`specs/spec-11-core-gateway.md`, requisitos 22 y 22bis: un `AgentRuntime` de Janus por
+sesión principal (misma task de asyncio por sesión, sin lock compartido salvo el que ya
+exige consistencia de memoria/persistencia); visibilidad entre sesiones por pull
+(`get_task_status`) y memoria compartida, nunca por resumen inyectado; interrupción
+configurable por modo de canal (cola FIFO en texto, cancelar y refundir en voz); y un
+mecanismo de aviso selectivo (`task_finalize` con regla decidida en código, checklist de
+subtareas sin costo de turno, cola de baja prioridad para pedidos internos de
+subagentes vía `request_delegation`) pensado explícitamente para que la concurrencia
+interna de Janus no dispare un consumo de tokens proporcional a la granularidad del
+trabajo delegado. Impacto aplicado también en spec 01 (`TaskChecklistItem`, `required`),
+spec 03 (`checklist_json`, `tasks.mark_checklist_item`), spec 06 (evento
+`task.subitem_changed`) y spec 12 (aprobación por tipo de acción en GUI automation,
+residual relacionado surgido en la misma discusión).
 
 ## 10. Política de resolución de errores en cascada entre tareas dependientes — RESUELTA
 **Origen:** `05-modelo-de-roles-y-tareas.md`, sección 4.

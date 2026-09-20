@@ -1,13 +1,14 @@
 # TODO — Janus
 
 Estado del proyecto: arquitectura pura (`docs/architecture/`) + tech-stack
-(`docs/stack/`) + modelo de agentes (`docs/agents/`) cerrados, incluyendo todos los
-flecos de discusión menores. Este
-archivo es la lista viva de lo que falta antes de poder implementar. Se actualiza a
-medida que cada punto se resuelve (vía `/discuss`, `/adr` o `/spec`).
+(`docs/stack/`) + modelo de agentes (`docs/agents/`) cerrados, y las **15 specs de
+implementación escritas** (`docs/specs/`, 2026-09-19). Este archivo es la lista viva de lo
+que falta antes y durante la implementación. Se actualiza a medida que cada punto se
+resuelve.
 
-Orden de trabajo acordado: **documentar todo → ADRs de las decisiones grandes → specs
-por componente → kanban (GitHub Projects u otra app) → implementación.**
+Orden de trabajo acordado: **documentar todo → specs por componente → kanban
+(GitHub Projects u otra app) → implementación.** Las dos primeras etapas están completas
+a la espera de confirmar las decisiones propuestas de la sección 2.
 
 ---
 
@@ -45,138 +46,114 @@ reestructurar `libs/capabilities/`.
 ### 1.5 ~~Nuevos flecos abiertos por el modelo de agentes~~ — RESUELTO
 - Config por agente: **resuelto** — cada agente es un folder con topología
   obligatoria (`Skills/`, `Instructions/`, `Rules/`, `Tools/`, `agent.md`,
-  `agent.toml`). Ver `docs/agents/03-skills-y-config.md`, sección 2.1. Pendiente solo la ubicación exacta de
-  esos folders dentro del monorepo (ver sección 1.6 abajo).
+  `agent.toml`). Ver `docs/agents/03-skills-y-config.md`, sección 2.1.
 - Categorías de memoria: **resuelto** — catálogo auto-extensible, cada agente crea
   las que necesita; única categoría de fábrica garantizada es `profile`. Ver
   `docs/agents/02-memoria.md`, sección 2.1.
-- Alternativa al MCP de filesystem: **resuelto** — fork de `filesystem-mcp-rs` en
-  `crates/filesystem-mcp/`, con `delete_path` recursivo, `bulk_edits`, `grep_files`
-  regex. Ver `docs/stack/02-monorepo.md` y `docs/agents/03-skills-y-config.md`, sección 2.
+- Alternativa al MCP de filesystem: **resuelto** — fork de un port en Rust del filesystem
+  MCP en `crates/filesystem-mcp/` con `bulk_edits` y `grep_files` regex. Corrección
+  verificada en septiembre de 2026: el upstream ya trae `delete_path` recursivo; el
+  delta real se mide en la spec 08.
 
-### 1.6 Nuevos flecos menores abiertos en esta última ronda (indexación + filesystem)
-Todos son detalle de `/spec`, ninguno bloquea el paso a ADRs:
-- Ubicación exacta de los folders de agente dentro del monorepo (p. ej.
-  `config/agents/<nombre>/` vs otra raíz). Ver `docs/agents/08-impacto-en-monorepo-y-diferido.md`, sección 2, punto 1.
-- Catálogo inicial de categorías de memoria más allá de `profile`, si conviene
-  sembrar alguna de fábrica. Ver `docs/agents/08-impacto-en-monorepo-y-diferido.md`, sección 2, punto 2.
-- Esquema exacto de la tabla de solicitudes en cola (`docs/agents/07-concurrencia.md`, sección 2).
-- Esquema exacto de persistencia de sesiones multi-participante (`docs/agents/04-orquestacion-y-sesiones.md`, sección 3).
-
----
-
-## 2. ADRs pendientes de redactar (`/adr`)
-
-Decisiones ya tomadas en `/discuss` que necesitan quedar registradas como Architecture
-Decision Record, con el porqué y las alternativas descartadas, para trazabilidad
-futura:
-
-- [ ] **ADR — Python + `abc` como lenguaje y mecanismo de contrato del núcleo**
-      (vs Go, vs TypeScript/Bun)
-- [ ] **ADR — Monorepo poliglota por convención de lenguaje**
-      (`apps/` + `libs/`/`crates/`/`packages/`/`proto/`, sin anidar por lenguaje
-      genérico)
-- [ ] **ADR — Un solo proceso asyncio para el núcleo, no microservicios internos**
-      (Core de Traducción + Registro + Persistencia en el mismo runtime)
-- [ ] **ADR — SQLite + `aiosqlite` sin ORM, en vez de Postgres**
-      (contexto: un solo host, un solo usuario, un solo escritor)
-- [ ] **ADR — Migraciones como archivos `.sql` versionados con runner propio**
-      (vs Alembic/yoyo-migrations)
-- [ ] **ADR — Redis como capa efímera, nunca fuente de verdad**
-- [ ] **ADR — Protocol Buffers + `buf` como modelo semántico único**
-      (vs dataclasses a mano por lenguaje)
-- [ ] **ADR — Hermes: extracción quirúrgica + refactor, no servicio externo ni fork
-      completo** (la decisión más grande de esta ronda; documentar las tres opciones
-      evaluadas (ver `docs/stack/05-harnesses-hermes-openclaw.md`, sección 1) y por qué se descartaron A y B)
-- [ ] **ADR — OpenClaw: fork completo, no extracción quirúrgica**
-      (criterio de corte opuesto al de Hermes, y por qué)
-- [ ] **ADR — División de responsabilidades voz/canales/razonamiento**
-      (Janus posee voz e identidad; channel-gateway solo transporta; reasoning-engine
-      solo razona — ninguno de los tres se solapa)
-- [ ] **ADR — TOML + Pydantic para configuración, en vez de YAML**
-- [ ] **ADR — Harnesses base vs spokes externos: sin arbitraje dinámico entre
-      harnesses base** (asignación fija declarada por el usuario, nunca competencia
-      en runtime)
-- [ ] **ADR — Sistema de tokens scopeados propio, en vez de asumir confianza por
-      localhost**
-- [ ] **ADR — GUI automation dividida Rust (bajo nivel) + Python (orquestación)**
-- [ ] **ADR — Composición AgentCore/AgentPersona, no herencia** (`docs/agents/01-modelo-de-agente.md`, sección 2)
-- [ ] **ADR — Orquestación exclusiva de Janus por ensamblado de toolset**, no por
-      permisos en runtime (`docs/agents/04-orquestacion-y-sesiones.md`, sección 1) — vale la pena documentar bien el
-      razonamiento de seguridad detrás de esto.
-- [ ] **ADR — Memoria por categorías, auto-extensible, con búsqueda semántica vía
-      `sqlite-vec`** (`docs/agents/02-memoria.md`, secciones 2.1 y 3), en vez de una base vectorial
-      dedicada aparte o un catálogo cerrado de categorías.
-- [ ] **ADR — Kokoro + Whisper/faster-whisper como defaults de voz**, con
-      intercambiabilidad por agente (`docs/agents/05-voz.md`)
-- [ ] **ADR — Concurrencia: tope solo por número de agentes (no por recursos), cola
-      FIFO por carriles de tipo, Janus exento** (`docs/agents/07-concurrencia.md`)
-- [ ] **ADR — Sesiones multi-participante por tarea, reutilizando el mecanismo de
-      sesión de Hermes**, con suscripción/desuscripción dinámica y cierre por conteo
-      de oyentes externos (Janus nunca cuenta) (`docs/agents/04-orquestacion-y-sesiones.md`, sección 3)
-- [ ] **ADR — Identidad visual en canal: Janus por defecto, multi-bot opcional por
-      agente** (`channel_identity: own_bot | shared_with_prefix`), con los matices de
-      estabilidad conocidos del multi-token en OpenClaw (`docs/agents/04-orquestacion-y-sesiones.md`, sección 4)
-- [ ] **ADR — Topología de carpetas obligatoria por agente** (`Skills/`,
-      `Instructions/`, `Rules/`, `Tools/`, `agent.md`, `agent.toml`) como mecanismo de
-      "filesystem como harness" (`docs/agents/03-skills-y-config.md`, sección 2.1)
-- [ ] **ADR — Fork de `filesystem-mcp-rs` sobre el MCP de filesystem oficial**, por
-      carecer de eliminación recursiva, búsqueda de patrones limitada, y sin
-      indexación — con skill obligatorio de uso para mitigar confusión del modelo
-      (`docs/stack/02-monorepo.md`; `docs/agents/03-skills-y-config.md`, sección 2)
-- [ ] **ADR — Indexación híbrida (BM25 + vectorial) extraída de Hermes** (`qmd`,
-      Semantic Codebase Search, Hybrid Tool Pre-Selection) para identidad de agente y
-      proyectos del usuario, separada de la memoria episódica en `sqlite-vec` (`docs/agents/02-memoria.md`,
-      sección 5)
-- [ ] **ADR — Licencia MIT, código abierto** (`docs/stack/10-gui-automation-y-licencia.md`, sección 2)
+### 1.6 ~~Flecos menores de indexación y filesystem~~ — RESUELTOS EN LAS SPECS
+Propuestas en `docs/specs/`; confirmar (ver sección 2):
+- Ubicación de los folders de agente: `config/agents/<Nombre>/` y catálogo compartido en
+  `config/catalog/` (spec 02).
+- Catálogo inicial de categorías de memoria: solo `profile`; el mecanismo es
+  auto-extensible (spec 07).
+- Esquema de la tabla de solicitudes en cola: `agent_queue` (spec 03).
+- Esquema de sesiones multi-participante: `sessions` y `session_participants` (spec 03).
 
 ---
 
-## 3. Specs de implementación pendientes (`/spec`)
+## 2. Decisiones propuestas por las specs — pendientes de confirmación
 
-Se generan después de cerrar los ADRs del punto 2. Orden sugerido (de más fundacional
-a más periférico):
+Las specs cerraron varios residuales de `docs/architecture/09-preguntas-abiertas.md`
+con una propuesta concreta. Ninguna se considera cerrada hasta que el usuario la
+confirme (el detalle y la tabla completa están en `docs/specs/README.md`):
 
-1. `libs/adapters/` — contratos ABC (`SpokeAdapter` y variantes)
-2. `libs/config/` — esquema Pydantic + parser TOML, incluyendo schemas de
-   `AgentCore`/`AgentPersona` con marca `requires_restart` por campo, y el schema de
-   la topología de carpetas obligatoria por agente (incluye resolver 1.6: ubicación
-   exacta de los folders)
-3. `libs/persistence/` — acceso SQLite vía `aiosqlite`, runner de migraciones, esquema
-   de memoria de dos niveles, esquema de cola de concurrencia y de sesiones
-   multi-participante (incluye resolver 1.6: esquemas de cola y sesiones)
-4. `libs/memory/` — categorización auto-extensible y búsqueda semántica sobre
-   `sqlite-vec` (incluye resolver 1.6: catálogo inicial de categorías si aplica)
-5. `crates/filesystem-mcp/` — fork de `filesystem-mcp-rs`, skill de uso correcto
-6. `proto/` + generación `buf` → `libs/proto-py/`
-7. `apps/core-gateway/` — Core de Traducción + Registro de Capacidades (orquestador
-   central)
-8. `libs/auth/` — tokens scopeados
-9. `libs/observability/` — logging estructurado + ring buffer + Redis pub/sub
-10. `libs/reasoning-engine/` — extracción y refactor del motor de Hermes, incluyendo
-    ensamblado de toolset por agente, gestión de sesiones multi-participante, e
-    indexación híbrida (identidad de agente + proyectos del usuario)
-11. `libs/capabilities/` — Registro de Capacidades extendido: delegación por
-    especialidad, cola/concurrencia por tipo de agente, cambio dinámico de proveedor,
-    `FailurePolicy`
-12. `packages/channel-gateway-core/` + `apps/channel-gateway/` — fork de OpenClaw,
-    incluyendo identidad visual multi-bot/prefijo compartido
-13. `crates/gui-automation/` — automatización de GUI en Rust + binding PyO3
+- [ ] Ubicación de agentes en `config/agents/` y catálogo en `config/catalog/` (spec 02).
+- [ ] Espacio de nombres Python `janus_*` y versión mínima 3.11 (specs 02 y 04).
+- [x] Selección entre spokes (residual de la pregunta 1, spec 09): salud, luego
+      política del usuario, luego rol solo para desempatar candidatos equivalentes.
+      Ante un fallo, se maneja con una `FallbackChain` declarativa que el usuario
+      define por agente/capacidad (N pasos encadenados, ej. Gemini, luego Claude,
+      luego OpenRouter, luego esperar), y un `FailureTriageAdvisor` que es un juicio
+      de Janus en runtime (no una tabla fija) sobre si seguir la cadena o escalar al
+      usuario. Confirmado.
+- [ ] Captura de memoria explícita por defecto (residual de la pregunta 2, spec 07).
+- [ ] Identidad de remitente en dos capas: emparejamiento del gateway más revalidación
+      en el núcleo (residual de la pregunta 3, specs 11 y 14).
+- [ ] Cascada por dependencia fallida: `BLOCK` por defecto (pregunta 10, spec 11).
+- [ ] Detección de GUI por árbol de accesibilidad con backends intercambiables
+      (residual de la pregunta 11, spec 12).
+- [ ] Variantes de `approval` (`ask_once_per_session`, `deny_always`) (specs 02 y 09).
+- [ ] Modelo de embeddings `intfloat/multilingual-e5-small` (specs 03 y 07).
+- [ ] Política de seguimiento de OpenClaw: revisión mensual filtrada a seguridad y
+      cambios de canales (spec 14).
+
+Preguntas de `architecture/09` que las specs no resuelven y siguen ABIERTAS: 5
+(procedencia de OpenClaude), 9 (multi-usuario), 12 (alcance de apps GUI de fábrica) y
+13 (futuro de Relay).
 
 ---
 
-## 4. Después de las specs
+## 3. Specs de implementación — ESCRITAS
 
+Todas en `docs/specs/` (índice, orden y dependencias en `docs/specs/README.md`).
+
+| # | Spec | Estado |
+|---|---|---|
+| 1 | `proto/` + `libs/proto-py/` | Escrita |
+| 2 | `libs/config/` | Escrita |
+| 3 | `libs/persistence/` | Escrita |
+| 4 | `libs/adapters/` (contratos) | Escrita |
+| 5 | `libs/auth/` | Escrita |
+| 6 | `libs/observability/` | Escrita |
+| 7 | `libs/memory/` | Escrita |
+| 8 | `crates/filesystem-mcp/` | Escrita, bloqueada por verificar licencia del upstream |
+| 9 | `libs/capabilities/` | Escrita |
+| 10 | `libs/reasoning-engine/` | Escrita, empieza con auditoría de extracción |
+| 11 | `apps/core-gateway/` | Escrita |
+| 12 | `crates/gui-automation/` | Escrita, empieza con spike de validación |
+| 13 | `libs/voice/` (nueva, sin dueño antes) | Escrita, con compuerta de rendimiento en el Pi |
+| 14 | `packages/channel-gateway-core/` + `apps/channel-gateway/` | Escrita, empieza con auditoría del fork |
+| 15 | Adaptadores concretos de spoke (nueva, sin dueño antes) | Escrita |
+
+Cambios frente al orden original: `proto/` pasó al primer lugar y se agregaron las
+specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
+
+---
+
+## 4. Trabajo previo a la implementación
+
+- [ ] Confirmar o ajustar las decisiones propuestas de la sección 2.
+- [ ] Verificar la licencia de `ssoj13/filesystem-mcp-rs` (bloqueante de la spec 08) y
+      decidir base alternativa si no hay licencia compatible con MIT.
+- [ ] Confirmar la licencia del commit de OpenClaw que se forkeará (el README indica
+      MIT) y del de Hermes (MIT verificado en el README).
 - [ ] Crear kanban (GitHub Projects u otra herramienta) a partir de las specs ya
-      escritas — cada spec se descompone en tareas concretas del kanban, no al revés.
-- [ ] Empezar implementación.
+      escritas: cada spec se descompone en tareas concretas, no al revés. Las fases 0
+      (auditorías y spikes de las specs 8, 10, 12 y 14) son tareas explícitas.
+- [ ] Empezar implementación por la spec 1 (`proto/`); en paralelo pueden ir las specs
+      2, 3, 6, 8, 12 y 13.
+
+---
+
+## Notas
+
+- **MVC**: se evaluó y no se adopta. Janus es un sistema de librerías y servicios por
+  capas con puertos (`Protocol`) entre ellas y contratos ABC en las fronteras, y no
+  tiene una interfaz de usuario propia dentro del alcance actual. Una GUI futura
+  (`architecture/07`) será un cliente más del núcleo. Si algún día se construye,
+  puede usar el patrón que convenga en ese cliente sin afectar al núcleo.
+- Los ADRs se retiraron del flujo por decisión del usuario y quedaron archivados en
+  `docs/_deprecated/adr/`. Las decisiones vigentes viven en `architecture/`, `stack/`,
+  `agents/` y `specs/`.
 
 ---
 
 ## Próximo paso inmediato
 
-Toda la arquitectura y el stack están documentados y sin flecos de discusión
-pendientes (solo detalles menores diferidos a `/spec`, listados en 1.6). El próximo
-paso es arrancar la sección 2: redactar los ADRs, empezando por las decisiones más
-fundacionales (lenguaje del núcleo, monorepo, persistencia) antes de las más
-específicas (voz, sesiones, identidad visual).
+Las specs están completas. El próximo paso es que el usuario revise y confirme las
+decisiones de la sección 2, y después armar el kanban desde las specs (sección 4).

@@ -121,17 +121,18 @@ redistribución. Se incluye de fábrica como harness base, por extracción quir�
 revisión mensual filtrada a nuevos proveedores de modelo y advisories de seguridad
 (`stack/05-harnesses-hermes-openclaw.md`, secciones 1 y 4).
 
-## 5. Procedencia de OpenClaude y su efecto en decisiones de extensión propia — ABIERTA
+## 5. Procedencia de OpenClaude y su efecto en decisiones de extensión propia — RESUELTA
 **Origen:** `08-mapa-de-componentes-reales.md`, sección 2.
 
 Se documentó que OpenClaude deriva del código base de Claude Code (no liberado
 oficialmente por Anthropic), consumido por Janus únicamente como spoke externo vía su
-servidor gRPC. Queda abierto si en algún momento se considera extender directamente ese
-código base (en lugar de solo consumirlo como spoke), y si esa decisión tendría
-implicaciones legales que no aplican al modelo actual de "solo consumo vía protocolo
-externo".
+servidor gRPC. Estaba abierto si en algún momento se consideraría extender directamente
+ese código base en lugar de solo consumirlo como spoke.
 
-`stack/` y `agents/` no tratan a OpenClaude; la pregunta sigue en pie sin cambios.
+**Resolución:** cerrada por decisión del usuario. Janus nunca tocará ni extenderá ese
+código base. El único modelo de integración válido, ahora y a futuro, es consumo como
+spoke externo vía protocolo (gRPC), sin excepción. No hay implicación legal que evaluar
+porque no hay escenario en el que se contemple lo contrario.
 
 ## 6. Mecanismo de integración con Claude Desktop y Gemini Desktop — RESUELTA A NIVEL DE ARQUITECTURA
 **Origen:** `08-mapa-de-componentes-reales.md`, secciones 5 y 6.
@@ -178,18 +179,39 @@ agente mediante `voice_provider` en `AgentPersona` (`agents/05-voz.md`).
 (`specs/spec-13-voice.md`), invocado por el núcleo como capacidad propia. Queda abierta
 la conversación dúplex en tiempo real, fuera del alcance de la primera versión.
 
-## 9. Modelo de multi-tenencia / multi-usuario — ABIERTA
-**No se ha discutido en ningún documento anterior.**
+## 9. Modelo de multi-tenencia / multi-usuario — RESUELTA (redefinida como multi-sesión de un único dueño)
+**No se había discutido en ningún documento anterior.**
 
-Toda la arquitectura descrita asume un único usuario dueño del sistema. No se ha
-evaluado si Janus debe contemplar, incluso a nivel de diseño futuro, más de un usuario
-compartiendo una misma instancia (con sesiones, preferencias y memoria aisladas entre
-sí), lo cual tendría implicaciones en el modelo de persistencia (documento 06) y en el
-de autenticación (pregunta 3 de este documento).
+Toda la arquitectura descrita asume un único usuario dueño del sistema. La pregunta
+original planteaba si Janus debía contemplar, a nivel de diseño futuro, más de un
+usuario compartiendo una misma instancia (con sesiones, preferencias y memoria
+aisladas entre sí).
 
-`stack/01-contexto-y-lenguajes.md` fija el contexto de despliegue actual como el de una
-sola persona en un solo host. Eso acota la versión actual, pero no evalúa un futuro
-multi-usuario.
+**Aclaración del usuario:** el caso real que le importa no es multi-tenencia (varios
+dueños aislados entre sí) sino **multi-sesión concurrente de un mismo dueño por
+distintos canales** — ejemplo dado: el usuario le pide a Janus por voz desde la cocina
+que prenda una luz mientras Janus está a mitad de una tarea de código pedida por texto.
+Esto es un caso distinto al de multi-tenencia y no requiere aislar memoria ni
+preferencias entre "usuarios", porque sigue siendo un único dueño.
+
+**Resolución:**
+- Multi-tenencia real (múltiples dueños) se descarta como objetivo de diseño. Janus
+  sigue siendo mono-usuario a nivel de identidad, persistencia y memoria.
+- El caso de múltiples solicitudes concurrentes del mismo usuario por canales
+  distintos **sí es un requisito confirmado**: Janus debe poder atender solicitudes
+  concurrentes sin serializarlas (no basta con que las tareas delegadas a subagentes
+  corran en paralelo, como ya cubre `agents/07-concurrencia.md`; Janus mismo, como
+  agente líder que conversa directamente con el usuario, debe poder procesar más de
+  una conversación/solicitud propia a la vez).
+
+**Residual nuevo, no cubierto por ningún documento existente:** `agents/07` fija que
+Janus está exento de todo tope de concurrencia y nunca hace cola, pero asume
+implícitamente que Janus procesa una interacción conversacional a la vez. Falta
+definir el modelo de concurrencia interna de Janus mismo (¿instancia única con
+manejo asíncrono de múltiples sesiones activas en paralelo, similar a como ya maneja
+múltiples sesiones con subagentes en `agents/04` sección 3? ¿o algo distinto?) para
+el caso de múltiples canales de entrada del mismo usuario. Se traslada a `/spec` de
+`apps/core-gateway` (spec 11) como requisito nuevo a incorporar.
 
 ## 10. Política de resolución de errores en cascada entre tareas dependientes — ABIERTA
 **Origen:** `05-modelo-de-roles-y-tareas.md`, sección 4.
@@ -234,21 +256,46 @@ ventanas intercambiables según el compositor, con un spike de validación antes
 la API. Se advierte que Wayland no ofrece una API única y que Raspberry Pi OS lo usa por
 defecto.
 
-## 12. Alcance de aplicaciones soportadas de fábrica vía automatización de interfaz gráfica — ABIERTA
+## 12. Alcance de aplicaciones soportadas de fábrica vía automatización de interfaz gráfica — RESUELTA
 **Origen:** `10-automatizacion-de-interfaz-grafica.md`, sección 1.
 
 Se estableció que el mecanismo es genérico y aplicable a cualquier aplicación de
-escritorio, no solo a Claude Desktop y Gemini Desktop. No se decidió si Janus debe
-traer, de fábrica, adaptadores específicos (en el sentido de la sección 5 de ese
-documento) para otras aplicaciones adicionales, o si el mecanismo genérico de
-plataforma se libera de fábrica y los adaptadores específicos por aplicación quedan
-como responsabilidad de la comunidad/usuario, en línea con el contrato de integración
-abierto del documento 02.
+escritorio, no solo a Claude Desktop y Gemini Desktop. Estaba abierto si Janus debía
+traer, de fábrica, adaptadores específicos para otras aplicaciones adicionales, o si
+solo el mecanismo genérico se libera de fábrica dejando los adaptadores puntuales para
+la comunidad/usuario.
 
-## 13. Futuro de Relay dentro de Janus — ABIERTA
+**Resolución:** mecanismo genérico de fábrica, más un puñado adicional de adaptadores
+de fábrica más allá de Claude Desktop y Gemini Desktop. La lista concreta de qué
+aplicaciones adicionales se incluyen queda pendiente como tarea de producto (no de
+arquitectura) — se decide al planificar la spec 15 o en una iteración posterior, sin
+bloquear el resto del diseño.
+
+## 13. Futuro de Relay dentro de Janus — RESUELTA
 **Origen:** `08-mapa-de-componentes-reales.md`, sección 4.
 
 Se identificaron dos rutas posibles — tratar a Relay como un spoke más que aporta una
 capacidad ya resuelta, o migrar su lógica para que sea parte nativa del Registro de
-Capacidades del núcleo — sin decidir cuál de las dos se seguirá, ni si Relay continúa
-operándose de forma independiente durante una transición.
+Capacidades del núcleo — sin decidir cuál de las dos se seguirá.
+
+**Resolución, según el usuario:** ninguna de las dos rutas tal cual. Relay (el
+proyecto personal `claude-toolkit` de gestión de múltiples perfiles de Claude
+Desktop) es útil pero está atado a mecanismos específicos de Linux; no se adopta su
+código ni se migra su lógica actual. Se conserva su **función** (orquestar múltiples
+perfiles/instancias de un mismo harness cuando uno se agota) pero **reescrita desde
+cero** para ser dinámica y portable, sin atarse a Linux.
+
+Esa función reescrita vive como un **spoke propio de Janus**: ni spoke externo de
+terceros ni lógica del núcleo, sino un adaptador cuyo código vive dentro del monorepo
+de Janus y que reemplaza a Relay por completo. En términos del contrato de spoke
+(`03-contrato-de-spoke.md`), no es un tipo nuevo — la distinción "propio" vs "externo"
+es de propiedad del código del adaptador, no de la naturaleza de la capacidad que
+aporta (que sigue siendo tipo 2.1 o 2.4 según el harness que orqueste). Relay como
+proyecto (`claude-toolkit`) queda deprecado una vez que este spoke propio lo
+reemplace; no hay período de transición donde ambos operen en paralelo por diseño,
+más allá del tiempo que tome la reescritura.
+
+**Residual para `/spec`:** diseño concreto del spoke propio (multiplataforma desde el
+inicio, no solo Linux) que reemplaza a `claude-toolkit`/Relay. No tiene spec propia
+todavía entre las 15 escritas; se agrega como spec nueva o se incorpora a la 15
+(adaptadores concretos de spoke) al planificar el kanban.

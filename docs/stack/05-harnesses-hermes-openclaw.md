@@ -107,9 +107,12 @@ proyecto):
   tal cual, ver sección 1).
 
 **OpenClaw:** esta política se definió solo para Hermes. Para OpenClaw (licencia MIT según
-su README, proyecto mantenido por una fundación, con versiones fechadas frecuentes) se
-propone una revisión mensual filtrada a avisos de seguridad y cambios de protocolo de los
-canales; ver `specs/spec-14-channel-gateway.md`, pendiente de confirmar.
+su README, proyecto mantenido por una fundación, con versiones fechadas frecuentes)
+el usuario confirmó **sin cadencia fija**: el upstream de OpenClaw no se revisa en
+calendario, solo ante un disparador concreto (un CVE público contra el proyecto, o un
+canal que deja de funcionar por un cambio de protocolo del lado de la plataforma
+mensajera). Esto reemplaza la propuesta de revisión mensual de `specs/spec-14-channel-
+gateway.md`, ahora confirmada en ese sentido: no calendario, sí disparador.
 
 **Proceso fijado:** no merge automático ni seguimiento en tiempo real del repo
 completo. Revisión periódica (cadencia mensual) filtrada a dos fuentes: el changelog/

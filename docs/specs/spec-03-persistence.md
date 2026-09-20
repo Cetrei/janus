@@ -1,7 +1,7 @@
 # Feature Spec: libs/persistence/ (SQLite con aiosqlite, migraciones y esquema)
 
 > **Status**: Ready for implementation
-> **Last updated**: 2026-09-19
+> **Last updated**: 2026-09-20
 > **Orden de implementación**: 3 de 15. Depende de: nada (solo `aiosqlite`; `sqlite-vec` opcional).
 
 ---
@@ -42,7 +42,8 @@ Una vez implementada, `core-gateway` (único proceso escritor) persiste todo el 
 17. `0004_tasks.sql`: `tasks(task_id PK, session_id FK, role, title, status CHECK IN ('pending','running','blocked','completed','failed','cancelled'), on_dependency_failure, assigned_spoke_id, input_json, result_json, status_reason, attempts, created_at, started_at, finished_at)`; `task_deps(task_id FK, depends_on_id FK, PRIMARY KEY(task_id, depends_on_id))` con índice B tree sobre `depends_on_id`; `task_assignments(task_id FK, spoke_id, assigned_at, unassigned_at, reason)` para trazabilidad de reasignaciones (`architecture/05` sección 3).
 18. `0005_agent_queue.sql`: `agent_queue(seq INTEGER PRIMARY KEY AUTOINCREMENT, request_id UNIQUE, agent_type, agent_name, session_id, task_id, status CHECK IN ('queued','running','done','cancelled','failed'), enqueued_at, started_at, finished_at, status_reason)` con índice `(agent_type, status, seq)`. La cola es FIFO por carril: el orden lo define `seq`. Las solicitudes de Janus nunca se encolan (`agents/07` sección 3).
 19. `0006_tokens.sql`: `tokens(token_id PK, name, kind CHECK IN ('internal','external'), secret_hash, scopes_json, created_at, expires_at, revoked_at, last_used_at)`. El contrato de hashing lo fija la spec 05.
-20. `0007_memory.sql`: `memory_categories(level CHECK IN ('agent','global'), agent_name, category, description, created_at, PRIMARY KEY(level, agent_name, category))` y `memory_entries(entry_id PK, level, agent_name, category, content, embedding_model, project_ref, source, created_at, updated_at)`. La categoría `profile` se siembra en la migración para el nivel global. La tabla virtual vectorial se crea en la migración `0008_memory_vec.sql` solo cuando `sqlite-vec` está disponible (ver Technical Decisions).
+20. `0007_memory.sql`: `memory_categories(level CHECK IN ('agent','global'), agent_name, category, description, created_at, PRIMARY KEY(level, agent_name, category))` y `memory_entries(entry_id PK, level, agent_name, category, content, embedding_model, embedding_dim, project_ref, source, created_at, updated_at)`. La categoría `profile` se siembra en la migración para el nivel global. La tabla virtual vectorial no vive en una migración numerada porque su dimensión depende del modelo de embeddings configurado (spec 07): se crea desde una plantilla con `Database.ensure_vec_table(dim)` (requisito 20bis).
+20bis. `Database.ensure_vec_table(dim: int) -> str` crea, si no existe, la tabla `memory_vec_<dim>` con `vec0(embedding float[<dim>] distance_metric=cosine)` a partir de la plantilla `templates/memory_vec.sql.tmpl`, empaquetada como dato del paquete: el DDL sigue viviendo en un archivo `.sql` y nunca en un string de Python. `dim` es la única sustitución permitida y se valida como entero entre 1 y 4096 antes de renderizar; cualquier otro valor lanza `PersistenceError`. Devuelve el nombre de la tabla. `Database.drop_vec_table(dim)` la elimina con la misma validación. Ambas requieren `sqlite-vec`; sin él lanzan `VectorExtensionUnavailable`.
 
 ### Operaciones clave
 21. `sessions.count_external_listeners(session_id)` cuenta participantes `user_listener` con `left_at IS NULL`. `sessions.close_if_idle(session_id)` cierra de forma atómica la sesión cuando la tarea es terminal y el conteo es cero (`agents/04` sección 3).
@@ -73,10 +74,10 @@ Una vez implementada, `core-gateway` (único proceso escritor) persiste todo el 
 * **Reason**: requisito de control total (`stack/03` sección 3); el checksum evita que una migración aplicada se edite en silencio.
 * **Rejected alternatives**: Alembic o yoyo (dependencia y modelo de ORM que el usuario descartó).
 
-### Tabla vectorial con dimensión fija por migración
-* **Chosen**: `memory_vec` se crea con `vec0(embedding float[384])`, dimensión propuesta que coincide con los modelos multilingües pequeños candidatos de la spec 07. Cada entrada guarda su `embedding_model`; si cambia el modelo o la dimensión, una migración nueva crea otra tabla y `libs/memory` re embebe.
-* **Reason**: `vec0` exige la dimensión en el DDL, y el DDL no puede vivir en Python (`stack/03` sección 3). Fijarla en el `.sql` respeta ambas reglas.
-* **Rejected alternatives**: crear la tabla en runtime con SQL interpolado (rompe la regla de no embeber DDL); almacenar vectores como BLOB y buscar en Python (pierde la aceleración de `sqlite-vec`).
+### Tabla vectorial por dimensión, desde una plantilla SQL
+* **Chosen**: una tabla `memory_vec_<dim>` por dimensión de embedding, creada bajo demanda por `ensure_vec_table(dim)` a partir de `templates/memory_vec.sql.tmpl`. La dimensión sale del modelo configurado (`memory.embedding_model`, spec 02), cuyo default es de 1024 dimensiones. Cada entrada guarda `embedding_model` y `embedding_dim`; al cambiar de modelo, `libs/memory` crea la tabla de la nueva dimensión, re embebe y descarta la anterior solo si todo salió bien.
+* **Reason**: el usuario decidió que el modelo se configura en el sistema, así que la dimensión no se conoce al escribir una migración. `vec0` exige la dimensión en el DDL, y el DDL no puede vivir como string en Python (`stack/03` sección 3). Una plantilla `.sql` con un único parámetro entero validado mantiene el DDL en un archivo y cubre cualquier modelo, sin una migración por cada cambio de modelo.
+* **Rejected alternatives**: dimensión fija en una migración (`float[384]` o `float[1024]`; obliga a una migración nueva por cada cambio de modelo y contradice que el modelo sea configurable); crear la tabla en runtime con SQL interpolado libre (rompe la regla de no embeber DDL, a diferencia de la plantilla con un único entero validado); almacenar vectores como BLOB y buscar en Python (pierde la aceleración de `sqlite-vec`).
 
 ### Mensajes de sesión fuera del esquema de Janus
 * **Chosen**: la persistencia guarda metadatos de sesión y participantes; el historial de mensajes lo persiste el motor extraído en `libs/reasoning-engine` y se referencia por `engine_session_ref`.
@@ -112,7 +113,9 @@ libs/persistence/
   pyproject.toml
   migrations/
     0001_init.sql  0002_registry.sql  0003_sessions.sql  0004_tasks.sql
-    0005_agent_queue.sql  0006_tokens.sql  0007_memory.sql  0008_memory_vec.sql
+    0005_agent_queue.sql  0006_tokens.sql  0007_memory.sql
+  templates/
+    memory_vec.sql.tmpl   # DDL de la tabla vectorial; la dimension es el unico parametro
   src/janus_persistence/
     __init__.py
     database.py        # Database, transaction, PRAGMAs, carga de sqlite-vec
@@ -142,7 +145,7 @@ Entity Participant { session_id, participant_id, kind, channel_ref, joined_at, l
 Entity TokenRow    { token_id, name, kind, secret_hash, scopes_json, created_at,
                      expires_at?, revoked_at?, last_used_at? }
 Entity MemoryEntry { entry_id, level, agent_name?, category, content, embedding_model,
-                     project_ref?, source, created_at, updated_at }
+                     embedding_dim, project_ref?, source, created_at, updated_at }
 ```
 
 ---
@@ -183,7 +186,7 @@ Errores: `PersistenceError` (base), `MigrationTamperedError`, `MigrationSequence
 
 ## Testing Requirements
 
-**Unit Tests**: PRAGMAs aplicados; `transaction` con commit, rollback y anidamiento; runner con base vacía, base ya migrada, checksum alterado, secuencia con hueco; cada repositorio con un caso feliz y uno de restricción violada; `close_if_idle` con cero, uno y varios oyentes; FIFO de `next_for_lane` con carriles mezclados; `recover_after_crash`.
+**Unit Tests**: PRAGMAs aplicados; `transaction` con commit, rollback y anidamiento; runner con base vacía, base ya migrada, checksum alterado, secuencia con hueco; cada repositorio con un caso feliz y uno de restricción violada; `close_if_idle` con cero, uno y varios oyentes; FIFO de `next_for_lane` con carriles mezclados; `recover_after_crash`; `ensure_vec_table` con dimensión válida, repetida (idempotente) e inválida (cero, negativa, mayor a 4096, no entera) y `drop_vec_table`.
 
 **Integration Tests**: ciclo completo crear sesión, tareas con dependencias, cola y recuperación tras cerrar y reabrir la base; carga y consulta de `sqlite-vec` en la plataforma de CI (x86_64) y en un aarch64 de verificación manual; prueba de migración desde una base creada con la primera versión del esquema.
 
@@ -196,11 +199,12 @@ Errores: `PersistenceError` (base), `MigrationTamperedError`, `MigrationSequence
 - [ ] Migraciones inmutables por checksum
 - [ ] Sin importar librerías de dominio (evita ciclos y fuga de responsabilidades)
 - [ ] Extensiones de SQLite solo cargadas desde el paquete verificado
+- [ ] `ensure_vec_table` y `drop_vec_table` aceptan solo un entero validado, sin otra interpolación
 
 ---
 
 ## Open Questions
-- [ ] Modelo de embeddings y dimensión definitiva (384 es propuesta; ver spec 07). Si cambia, la migración `0008` cambia antes del primer release.
+- [x] Modelo de embeddings y dimensión: resuelto. El modelo es configurable y la dimensión sale del modelo (`ensure_vec_table`); el default de fábrica es de 1024 dimensiones (spec 07).
 - [ ] `sqlite-vec` es pre v1 (0.1.x) y sus wheels aarch64 tuvieron problemas en versiones anteriores; verificar la wheel de la versión elegida en el Pi antes de fijar la dependencia.
 - [ ] Política de retención (cuánto tiempo se conservan sesiones cerradas y tareas terminales). No decidida; por ahora se conservan sin límite.
 

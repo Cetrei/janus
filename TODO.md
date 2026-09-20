@@ -81,14 +81,27 @@ confirme (el detalle y la tabla completa están en `docs/specs/README.md`):
       luego OpenRouter, luego esperar), y un `FailureTriageAdvisor` que es un juicio
       de Janus en runtime (no una tabla fija) sobre si seguir la cadena o escalar al
       usuario. Confirmado.
-- [ ] Captura de memoria explícita por defecto (residual de la pregunta 2, spec 07).
-- [ ] Identidad de remitente en dos capas: emparejamiento del gateway más revalidación
-      en el núcleo (residual de la pregunta 3, specs 11 y 14).
-- [ ] Cascada por dependencia fallida: `BLOCK` por defecto (pregunta 10, spec 11).
-- [ ] Detección de GUI por árbol de accesibilidad con backends intercambiables
-      (residual de la pregunta 11, spec 12).
-- [ ] Variantes de `approval` (`ask_once_per_session`, `deny_always`) (specs 02 y 09).
-- [ ] Modelo de embeddings `intfloat/multilingual-e5-small` (specs 03 y 07).
+- [x] Captura de memoria (residual de la pregunta 2, spec 07): explícita y nada más.
+      Janus y sus subagentes guardan con `remember` por decisión propia o pedido del
+      usuario; no existe captura automática, ni como opción. Confirmado.
+- [x] Identidad de remitente en capas (residual de la pregunta 3, specs 11 y 14):
+      identificador por plataforma por defecto, más un secreto compartido opcional en un
+      `.md` libre que el agente valida con una tool. Confirmado. Queda por diseñar el ciclo
+      de `mark_sender_verified` y `owner_reverify` (ver sección 4).
+- [x] Cascada por dependencia fallida (pregunta 10, spec 11): no es un enum estático; la
+      decide Janus en runtime con `DependencyFailureTriage` (`RETRY`, `CANCEL_CASCADE`,
+      `ASK_USER`). Confirmado.
+- [x] Detección de GUI por árbol de accesibilidad con backends intercambiables
+      (residual de la pregunta 11, spec 12). Enfoque confirmado; las librerías concretas
+      (`atspi`, `xcap`, `enigo`) se deciden en el spike de la fase 0 de la spec 12.
+- [x] Variantes de `approval` (specs 02 y 09, `agents/06`): las cuatro (`ask_everytime`,
+      `ask_once_per_session`, `allow_always`, `deny_always`). Confirmado.
+- [x] Modelo de embeddings (specs 02, 03 y 07): configurable en el sistema. El usuario
+      confirmó la configurabilidad y que el default debe correr en su PC (32 GB de RAM,
+      6 GB de VRAM). Default elegido por el Architect bajo esa restricción y revisable:
+      `intfloat/multilingual-e5-large` (1024 dimensiones, CPU); perfil Pi:
+      `intfloat/multilingual-e5-small` (384). La tabla vectorial pasa a crearse por
+      dimensión desde una plantilla (spec 03, requisito 20bis).
 - [x] Política de seguimiento de OpenClaw: sin cadencia fija, solo ante un disparador
       concreto (CVE público o canal roto). Confirmado (spec 14, `stack/05`).
 
@@ -161,6 +174,11 @@ specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
       se incorpora a la 15, a decidir al planificar el kanban.
 - [ ] Incorporar a la spec 11 el diseño de concurrencia interna de Janus (múltiples
       `SESSION_KIND_JANUS_MAIN` en paralelo por canal, residual de la pregunta 9).
+- [ ] Diseñar en las specs 11 y 14 el ciclo de verificación por secreto compartido: cómo se
+      incrusta el `.md` en el contexto, la tool `mark_sender_verified`, la vigencia por
+      `owner_reverify` y el valor por defecto de ese campo (Open Question de la spec 02).
+- [ ] Medir en la PC del usuario `multilingual-e5-large` (CPU y CUDA) y recalibrar el
+      umbral de deduplicación de memoria y los objetivos de latencia (specs 07 y 10).
 - [ ] Crear kanban (GitHub Projects u otra herramienta) a partir de las specs ya
       escritas: cada spec se descompone en tareas concretas, no al revés. Las fases 0
       (auditorías y spikes de las specs 8, 10, 12 y 14) son tareas explícitas.
@@ -184,5 +202,8 @@ specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
 
 ## Próximo paso inmediato
 
-Las specs están completas. El próximo paso es que el usuario revise y confirme las
-decisiones de la sección 2, y después armar el kanban desde las specs (sección 4).
+Las specs están completas y las decisiones de la sección 2 quedaron confirmadas, salvo
+dos que no entraron en esta ronda: la ubicación de agentes en `config/agents/` con
+catálogo en `config/catalog/` (spec 02) y el espacio de nombres `janus_*` con Python 3.11
+o superior (specs 02 y 04). Resueltas esas dos, el siguiente paso es armar el kanban
+desde las specs (sección 4).

@@ -6,7 +6,7 @@
 Sistema operativo personal de agentes (estrella pura: ningún spoke habla con otro, todo pasa por Janus). Uso personal, un solo host (PC o Raspberry Pi). Licencia MIT, copyright Joanfer.
 
 ## Estado (2026-09-19)
-Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 specs de implementación escritas** en `docs/specs/`. Siguiente paso: que el usuario confirme las decisiones propuestas y se arme el kanban desde las specs. No hay código todavía.
+Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 specs de implementación escritas** en `docs/specs/`. Las decisiones propuestas por las specs quedaron confirmadas (2026-09-20), salvo dos: ubicación de agentes en `config/agents/` con catálogo en `config/catalog/` (spec 02) y espacio de nombres `janus_*` con Python 3.11 o superior (specs 02 y 04). Siguiente paso: resolver esas dos y armar el kanban desde las specs. No hay código todavía.
 
 ## Mapa
 * `TODO.md`: lista viva. Decisiones pendientes de confirmar (sección 2), estado de las specs (sección 3) y trabajo previo a implementar (sección 4).
@@ -48,3 +48,29 @@ concurrencia interna de Janus por canales, no multi-tenencia), alcance de GUI de
 desde cero como spoke propio de Janus, portable, reemplazando a `claude-toolkit`).
 Quedan dos residuales de implementación nuevos: la spec del spoke que reemplaza a Relay
 (sin número aún) y el diseño de concurrencia interna de Janus en spec 11.
+
+## Segunda ronda de la sesión (2026-09-20): decisiones de las specs confirmadas
+Se cerraron seis decisiones propuestas por las specs:
+* **Captura de memoria (spec 07)**: solo explícita. Janus y sus subagentes guardan con
+  `remember` por decisión propia o pedido del usuario; no hay captura automática ni como
+  opción (se eliminó el hook `on_task_completed` y `memory.auto_capture`).
+* **Identidad de remitente (specs 02, 11, 14)**: identificador por plataforma por defecto,
+  más un secreto compartido opcional en un `.md` libre que el agente valida llamando a
+  `mark_sender_verified`. Se agregaron `owner_reverify` y `owner_challenge_file` a la
+  config por canal (spec 02). Falta diseñar el ciclo de esa tool y el default de
+  `owner_reverify`.
+* **Approval (specs 02, 09, `agents/06`)**: cuatro valores, `ask_everytime`,
+  `ask_once_per_session`, `allow_always`, `deny_always`.
+* **Cascada por dependencia fallida y detección de GUI**: ya estaban resueltas en las
+  specs 11 y 12 y en `architecture/09`; solo faltaba marcarlas en `TODO.md`.
+* **Embeddings (specs 02, 03, 07)**: el modelo es configurable y el default se elige para
+  la PC del usuario (32 GB de RAM, 6 GB de VRAM), no para el Pi. Default:
+  `intfloat/multilingual-e5-large` (1024 dimensiones, CPU); perfil Pi:
+  `intfloat/multilingual-e5-small` (384). El modelo concreto lo eligió el Architect bajo la
+  restricción del usuario y es revisable.
+* **Consecuencia estructural en la spec 03**: la tabla vectorial ya no tiene dimensión fija
+  en una migración. Se crea por dimensión (`memory_vec_<dim>`) con
+  `Database.ensure_vec_table(dim)` desde una plantilla `.sql.tmpl`; el cambio de modelo
+  re embebe y descarta la tabla anterior solo si todo salió bien.
+* **Corrección verificada**: `multilingual-e5-small` no está en la lista integrada de
+  `fastembed` (requiere `add_custom_model`); `multilingual-e5-large` sí.

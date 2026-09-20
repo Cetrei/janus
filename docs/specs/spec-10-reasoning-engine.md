@@ -241,7 +241,7 @@ Errores: `ProviderError(retryable)`, `ToolNotAvailable`, `AgentConfigInvalid`, `
 - [ ] Resultado de la fase 0: qué módulos exactos se conservan; puede cambiar la lista de dependencias y el esfuerzo total. Revisar esta spec al terminar la auditoría.
 - [ ] El bucle upstream usa `ThreadPoolExecutor` para tools; decidir en la auditoría si se conserva o se reescribe como asyncio nativo.
 - [ ] Configuración de aprobación para tools de ejecución (`exec`): agregar a `extra_tools` de la spec 02 los campos `mode` (`ask`, `allowlist`) y `allowlist`.
-- [ ] Unificar el embedder de la memoria con el del indexador, si el de Hermes (`fastembed`) admite el mismo modelo multilingüe.
+- [ ] Unificar el embedder de la memoria con el del indexador, si el de Hermes (`fastembed`) admite el mismo modelo multilingüe. El modelo de memoria ahora es configurable, con default `intfloat/multilingual-e5-large` (1024 dimensiones, spec 07). Si se unifica, el índice híbrido hereda ese modelo, y los objetivos de latencia de reconstrucción del índice y de `ToolPreSelector` (calibrados para el Pi) se recalibran midiendo en la PC del usuario.
 
 ---
 

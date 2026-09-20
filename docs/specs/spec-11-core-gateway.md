@@ -299,10 +299,15 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
       `FailureTriageAdvisor` de la spec 09.
 - [x] Identidad de remitente por múltiples capas: confirmado por el usuario como cuatro
       señales composables por canal (pairing del gateway, `identity.owner` por
-      plataforma, desafío `.md` evaluado por el agente, biometría local). Falta el
-      diseño concreto de `owner_reverify` y `mark_sender_verified` (nuevo, sin escribir
-      todavía) y la integración con la capacidad de biometría de la pregunta 14 de
-      `architecture/09` (sin spec propia aún).
+      plataforma, desafío `.md` evaluado por el agente, biometría local). Forma de
+      `identity.owner` reconfirmada (2026-09-20): por defecto el identificador por
+      plataforma, más un secreto compartido opcional que el usuario redacta libremente en
+      un `.md`, se incrusta en el contexto del agente y se da por validado cuando el
+      agente llama a `mark_sender_verified`. Los campos de configuración por canal
+      (`owner_reverify`, `owner_challenge_file`) ya están en la spec 02. Falta el diseño
+      concreto del ciclo de `mark_sender_verified` y `owner_reverify` (nuevo, sin
+      escribir todavía) y la integración con la capacidad de biometría de la pregunta 14
+      de `architecture/09` (sin spec propia aún).
 - [ ] Concurrencia interna de Janus (pregunta 9 de `architecture/09`, confirmado como requisito): Janus debe atender múltiples `SESSION_KIND_JANUS_MAIN` de distintos canales del mismo usuario en paralelo, sin serializar una detrás de otra. Falta el diseño concreto: si cada sesión principal corre en su propia task de asyncio de forma independiente, qué recursos compartidos (memoria, persistencia, toolset) requieren lock y cuáles no.
 - [ ] Nombre de tool MCP derivado de `capability_id`: verificar caracteres admitidos por el SDK de MCP al implementar.
 - [ ] Mapa `roles.<rol>.capability`: valores iniciales propuestos; ajustar con el uso real.

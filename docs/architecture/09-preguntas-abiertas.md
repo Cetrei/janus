@@ -16,7 +16,7 @@ documento. Las referencias `stack/` y `agents/` apuntan a las carpetas hermanas 
 
 ---
 
-## 1. Política de prioridad entre criterios de selección de spoke — PARCIALMENTE RESUELTA
+## 1. Política de prioridad entre criterios de selección de spoke — RESUELTA
 **Origen:** `04-modelo-de-capacidades-y-enrutamiento.md`, sección 3.
 
 Cuando más de un spoke sirve la misma capacidad, se identificaron tres criterios de
@@ -32,16 +32,16 @@ global o configurable por capacidad/rol.
 hardcodeada (`stack/07-descubrimiento-y-capacidades.md`, sección 2). Entre harnesses
 base no hay selección dinámica: la asignación es fija (misma referencia, sección 1.3).
 Para el caso del cambio de proveedor de modelo, caer a otro proveedor es una tool call
-sujeta a una política de aprobación configurable (`ask_everytime`, `allow_always` y
-variantes), global con override por agente (`agents/06-cambio-dinamico-de-modelo.md`).
+sujeta a una política de aprobación configurable con cuatro valores confirmados por el
+usuario (`ask_everytime`, `ask_once_per_session`, `allow_always` y `deny_always`), global
+con override por agente (`agents/06-cambio-dinamico-de-modelo.md`).
 
-**Residual abierto:** el orden de prioridad entre los tres criterios cuando entran en
-conflicto para capacidades que no son cambio de proveedor de modelo, y si esa prioridad
-es global o configurable por capacidad/rol.
-
-**Propuesta pendiente de confirmar** (`specs/spec-09-capabilities.md`): salud, luego
-política del usuario, luego sugerencia de rol; comportamiento configurable con
-`on_preferred_unavailable` (`fallback` por defecto, `block`, `ask`).
+**Residual cerrado:** el orden de prioridad entre los tres criterios para capacidades
+que no son cambio de proveedor de modelo. Confirmado por el usuario
+(`specs/spec-09-capabilities.md`): salud, luego política del usuario, luego sugerencia de
+rol, y ese orden sirve solo para desempatar candidatos de salud equivalente. Qué hacer
+ante un fallo no lo decide un enum (`fallback` | `block` | `ask`) sino el mecanismo que
+sigue.
 
 **Precisión del usuario sobre el mecanismo de fallback:** son dos cosas separadas.
 
@@ -63,7 +63,7 @@ cerrado no alcanza para cubrir cadenas de N pasos, y el criterio de escalar a av
 debe vivir como un valor fijo del enum sino como una evaluación del propio Janus. Ver
 spec 09 para el ajuste concreto.
 
-## 2. Mecanismo concreto de captura y consulta de memoria de largo plazo — PARCIALMENTE RESUELTA
+## 2. Mecanismo concreto de captura y consulta de memoria de largo plazo — RESUELTA
 **Origen:** `06-modelo-de-persistencia-y-estado.md`, sección 2.4.
 
 Se estableció que la memoria de largo plazo pertenece a la persistencia transversal del
@@ -77,14 +77,19 @@ con `profile` como única semilla de fábrica, recuperada por similitud semánti
 `sqlite-vec` mediante una tool dedicada (`recall_memory`); la relevancia es la
 similitud entre la consulta y la entrada (`agents/02-memoria.md`).
 
-**Residual abierto:** qué dispara la escritura de una entrada en memoria (captura
-automática por la infraestructura vs. decisión explícita del agente).
-`agents/02-memoria.md` no lo fija.
+**Residual cerrado por el usuario (2026-09-20):** la captura es explícita y nada más.
+Janus es un agente: guarda recuerdos cuando lo decide o cuando el usuario se lo pide, y
+sus subagentes hacen lo mismo, mediante la tool `remember`. No existe captura automática
+de infraestructura, ni siquiera como opción configurable
+(`specs/spec-07-memory.md`, requisito 18).
 
-**Propuesta pendiente de confirmar** (`specs/spec-07-memory.md`): captura explícita por
-defecto mediante la tool `remember`, con captura automática opcional desactivada.
+**Modelo de embeddings, también cerrado:** es configurable en el sistema
+(`memory.embedding_model`) y su default se elige para el hardware del usuario (PC con
+32 GB de RAM y 6 GB de VRAM), no para el Raspberry Pi; el Pi usa un perfil más chico. La
+dimensión del índice vectorial se deriva del modelo (`specs/spec-03-persistence.md`,
+requisito 20bis).
 
-## 3. Mecanismo de autenticación/autorización para control externo — PARCIALMENTE RESUELTA
+## 3. Mecanismo de autenticación/autorización para control externo — RESUELTA A NIVEL DE ARQUITECTURA, DETALLE DIFERIDO A `/spec`
 **Origen:** `07-superficie-para-gui-futura.md`, sección 4.
 
 Se estableció qué debe ser controlable desde afuera del núcleo, pero no cómo se
@@ -121,13 +126,17 @@ verificación exitosa por desafío `.md` también es configurable por canal/ámb
 desde la PC (interacción directa) nunca se pide, desde WhatsApp se pide una vez por
 chat nuevo, desde un speaker de la casa se pide siempre.
 
-**Propuesta pendiente de confirmar** (`specs/spec-11-core-gateway.md` y
-`specs/spec-14-channel-gateway.md`): verificación en dos capas, con el emparejamiento y la
-lista de permitidos del gateway más una revalidación en el núcleo contra `identity.owner`.
-Esta propuesta se mantiene como el mecanismo base (señal 1); las señales 2 y 3 son la
-extensión confirmada por el usuario en esta ronda, y quedan como trabajo de diseño
-nuevo para las specs 11 y 14 (campo `owner_reverify` por canal, mecanismo de desafío
-`.md` y tool `mark_sender_verified`, e integración con la biometría de la pregunta 14).
+**Confirmado por el usuario (2026-09-20)** (`specs/spec-11-core-gateway.md` y
+`specs/spec-14-channel-gateway.md`): verificación en capas, con el emparejamiento y la
+lista de permitidos del gateway más una revalidación en el núcleo. La forma concreta de
+`identity.owner` es una mezcla: por defecto el identificador por plataforma (señal 1,
+comparación mecánica), y opcionalmente un secreto compartido que el usuario decide y
+escribe libremente en un `.md` (señal 2). Ese secreto se incrusta en el contexto del
+agente hasta que este decide que la identidad quedó validada y lo marca llamando a una
+tool. Los campos de configuración por canal (`owner_reverify`, `owner_challenge_file`)
+ya están en `specs/spec-02-config.md`. Queda como trabajo de diseño para las specs 11 y
+14 el ciclo de la tool `mark_sender_verified` y la integración con la biometría de la
+pregunta 14.
 
 ## 4. Gobernanza y licencia de Hermes — RESUELTA
 **Origen:** `08-mapa-de-componentes-reales.md`, sección 1.

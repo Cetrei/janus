@@ -45,14 +45,16 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 | Extensión de `proto/` con 5 archivos más (`common`, `session`, `channel`, `spoke`, `gateway`) | 01 | Decidido en la spec |
 | Código generado de protobuf commiteado al repo (las remote plugins de buf requieren red) | 01 | Decidido en la spec |
 | Tokens: `jns_<id>.<secret>`, SHA 256 con sal (no KDF lento) | 05 | Decidido en la spec |
-| Modelo de embeddings: `intfloat/multilingual-e5-small`, 384 dimensiones | 03, 07 | Propuesta (verificar al instalar) |
-| Captura de memoria explícita por defecto (residual de la pregunta 2) | 07 | Propuesta |
+| Modelo de embeddings configurable (`memory.embedding_model`); default `intfloat/multilingual-e5-large` (1024 dimensiones, CPU) para la PC del usuario; perfil `intfloat/multilingual-e5-small` (384) para el Pi | 02, 03, 07 | Configurabilidad confirmada; default elegido por el Architect bajo la restricción de 32 GB de RAM y 6 GB de VRAM, revisable |
+| Tabla vectorial por dimensión (`memory_vec_<dim>`) creada desde una plantilla SQL, en vez de dimensión fija en una migración | 03 | Decidido en la spec (consecuencia de que el modelo sea configurable) |
+| Captura de memoria explícita y nada más, sin captura automática ni como opción (residual de la pregunta 2) | 07 | Confirmada |
 | Orden salud → política → rol solo para desempate; fallo se maneja con `FallbackChain` declarativa (N pasos del usuario) más `FailureTriageAdvisor` (juicio de Janus, no tabla fija) (residual de la pregunta 1) | 09 | Confirmada |
 | Cambio de proveedor: override en `preferences`, no reescribir `agent.toml` | 09 | Decidido en la spec |
-| Cascada de dependencias fallidas: `BLOCK` por defecto (pregunta 10) | 11 | Propuesta |
-| Identidad de remitente en dos capas (residual de la pregunta 3) | 11, 14 | Propuesta |
+| Cascada de dependencias fallidas decidida por Janus en runtime (`DependencyFailureTriage`), no un enum estático (pregunta 10) | 11 | Confirmada |
+| Identidad de remitente en capas: pairing del gateway, `identity.owner` por plataforma, secreto compartido en `.md` validado por el agente y biometría local opcional (residual de la pregunta 3) | 02, 11, 14 | Confirmada |
+| Política de aprobación con cuatro valores: `ask_everytime`, `ask_once_per_session`, `allow_always`, `deny_always` | 02, 09 | Confirmada |
 | `SessionHub` vive en `libs/reasoning-engine` | 10 | Decidido en la spec |
-| Detección de GUI por árbol de accesibilidad AT-SPI; backends intercambiables (residual de la pregunta 11) | 12 | Propuesta, validada por spike |
+| Detección de GUI por árbol de accesibilidad AT-SPI; backends intercambiables (residual de la pregunta 11) | 12 | Enfoque confirmado; librerías concretas por validar en el spike |
 | `libs/voice/` como librería propia; voz como capacidad del núcleo | 13 | Decidido en la spec |
 | `channel-gateway` es cliente gRPC del núcleo; su `port` es solo el endpoint de salud | 14 | Decidido en la spec |
 | Adaptadores concretos dentro de `libs/adapters` con extras opcionales | 15 | Decidido en la spec |
@@ -66,6 +68,7 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 * Raspberry Pi OS usa Wayland (`labwc`) por defecto; la automatización de GUI no puede asumir X11 (spec 12).
 * Las remote plugins de `buf` exigen conexión con la BSR; de ahí el código generado commiteado (spec 01).
 * `sqlite-vec` es pre v1 (0.1.x) y hubo problemas con wheels aarch64 en versiones previas (specs 03 y 07).
+* `intfloat/multilingual-e5-small` no figura en la lista integrada de modelos de `fastembed` (se registra con `TextEmbedding.add_custom_model`), y la spec 07 afirmaba lo contrario. `intfloat/multilingual-e5-large` (1024 dimensiones) sí figura, y `fastembed` corrigió su pooling (PR 445), así que hay que fijar una versión que lo incluya. La GPU exige el paquete aparte `fastembed-gpu` (specs 02 y 07).
 
 ## Cómo usar estas specs
 

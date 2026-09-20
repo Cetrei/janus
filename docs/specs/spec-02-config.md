@@ -1,7 +1,7 @@
 # Feature Spec: libs/config/ (esquema Pydantic, parser TOML y topología de agentes)
 
 > **Status**: Ready for implementation
-> **Last updated**: 2026-09-19
+> **Last updated**: 2026-09-20
 > **Orden de implementación**: 2 de 15. Depende de: nada (solo `pydantic` y `tomllib`).
 
 ---
@@ -40,11 +40,11 @@ Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de 
 15. `approval`: política de aprobación de cambio de proveedor con cuatro valores
     confirmados, `ask_everytime`, `ask_once_per_session`, `allow_always` y
     `deny_always`; global y con override por agente (`agents/06`).
-16. `memory`: `embedding_model` y `embedding_dim` (spec 07), `top_k_default`.
+16. `memory`: `embedding_model` (default `intfloat/multilingual-e5-large`), `embedding_device` (`cpu` por defecto, `cuda` o `auto`), `embedding_dim` (opcional: la dimensión se deriva del modelo y solo se exige para modelos registrados con `add_custom_model` que `fastembed` no conoce) y `top_k_default` (spec 07). Un perfil para hardware chico (Raspberry Pi) cambia solo `embedding_model` a `intfloat/multilingual-e5-small`. Un cambio de `embedding_model` o `embedding_device` exige reinicio de `core-gateway` y dispara `reindex()` al arrancar. No existe `auto_capture`: la captura de memoria es siempre explícita (spec 07, requisito 18).
 17. `voice`: proveedores por defecto de TTS y STT (spec 13).
 18. `observability`: `log_level`, `ring_buffer_size` (default 5000), rotación y canales Redis (spec 06).
-19. `identity.owner`: lista de identidades de canal autorizadas para comandos de control, cada una `{ platform, account_id, user_id }` (spec 11 y spec 14).
-19a. `channels`: tabla `plataforma -> lista de cuentas` con `account_id`, `role` (`main` o `agent_bot`), `credentials` (`SecretRef`), `allowlist` y límites (`max_attachment_bytes`, tamaño de colas). El núcleo resuelve los secretos y genera el archivo de runtime del `channel-gateway` (spec 14).
+19. `identity.owner`: lista de identidades de canal autorizadas para comandos de control, cada una `{ platform, account_id, user_id }` (spec 11 y spec 14). Es la señal base de la verificación en capas: el identificador por plataforma, con comparación mecánica.
+19a. `channels`: tabla `plataforma -> lista de cuentas` con `account_id`, `role` (`main` o `agent_bot`), `credentials` (`SecretRef`), `allowlist` y límites (`max_attachment_bytes`, tamaño de colas). El núcleo resuelve los secretos y genera el archivo de runtime del `channel-gateway` (spec 14). Por cuenta, además, `owner_reverify` (`never`, `per_session` o `always`) y `owner_challenge_file` (ruta opcional a un `.md` libre con el secreto compartido que el usuario decide, incrustado en el contexto del agente hasta que este lo da por validado con la tool `mark_sender_verified`, spec 11 requisito 26). `owner_reverify` solo tiene efecto si hay `owner_challenge_file`. Los flags de biometría por canal se agregan cuando exista la spec de esa capacidad (pregunta 14 de `architecture/09`).
 19b. `roles`: tabla `rol -> { capability }` con la capacidad que requiere cada rol (spec 11, requisito 18) y `task.max_attempts` (default 2). `harnesses.channel-gateway.command` define el comando que arranca el proceso supervisado y `approval.timeout_s` (default 600) el tiempo de espera de aprobaciones.
 19c. `voice.rtf_warn`, `voice.slow_policy`, `voice.keep_audio`, `voice.max_text_chars`, `voice.max_audio_s` y `voice.concurrency` (spec 13).
 
@@ -260,6 +260,7 @@ ConfigWatcher(paths: Sequence[Path], interval_s: float = 2.0, debounce_ms: int =
       actualizado.
 - [ ] Nombre del paquete: se adopta `janus_config` (espacio plano `janus_*`), que además resuelve la duda de la spec 04.
 - [ ] Puertos por defecto de `core.grpc_port` y `core.mcp_port`: los valores del ejemplo son placeholders.
+- [ ] Valor por defecto de `owner_reverify` cuando hay `owner_challenge_file`: el usuario dio ejemplos por ámbito (desde la PC nunca, desde WhatsApp una vez por chat nuevo, desde un speaker de la casa siempre) pero no un default global.
 
 ---
 

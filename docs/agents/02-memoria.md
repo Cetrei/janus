@@ -48,6 +48,12 @@ SQLite en vez de introducir una base de datos vectorial aparte:
 Cada entrada de memoria se guarda con: categoría, contenido, embedding, nivel (agente
 o global), y el agente/proyecto asociado si aplica.
 
+El modelo de embeddings es configurable en el sistema (`memory.embedding_model`) y la
+dimensión del índice vectorial se deriva del modelo. El default de fábrica se elige para el
+hardware del usuario (PC con 32 GB de RAM y 6 GB de VRAM): `intfloat/multilingual-e5-large`
+sobre CPU, con un perfil `intfloat/multilingual-e5-small` para hardware chico como el
+Raspberry Pi. Ver `specs/spec-07-memory.md`.
+
 ## 4. Tool de memoria
 
 El agente dispone de una tool (`recall_memory` o equivalente) que recibe una consulta
@@ -60,6 +66,15 @@ de Janus.
 Vive en `libs/persistence/` (extensión del módulo ya definido en
 `stack/03-persistencia.md`) más una nueva pieza `libs/memory/` para la lógica de
 categorización y búsqueda semántica.
+
+### 4.1 Captura: solo explícita
+
+Escribir un recuerdo es siempre una decisión explícita: el agente llama a la tool
+`remember` cuando lo considera valioso o cuando el usuario se lo pide. Vale para Janus y
+para cada subagente, sobre su propio nivel de agente o sobre el global. La
+infraestructura nunca escribe recuerdos por su cuenta: no hay captura automática, ni
+siquiera como opción configurable. El esfuerzo que asume la infraestructura es el de
+recuperar (`recall_memory`), no el de decidir qué guardar.
 
 ## 5. Indexación de identidad de agente y de proyectos del usuario — distinta de la memoria episódica
 

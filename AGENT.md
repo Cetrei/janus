@@ -24,12 +24,27 @@ Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 
 * MVC evaluado y descartado: el proyecto es una arquitectura por capas con puertos.
 
 ## Preguntas abiertas que las specs no resuelven
-5 (procedencia de OpenClaude), 9 (multi-usuario), 12 (alcance de apps GUI de fábrica), 13 (futuro de Relay).
+Ninguna. Las cuatro residuales de `architecture/09` (5 OpenClaude, 9 multi-usuario, 12
+GUI de fábrica, 13 Relay) se cerraron en la sesión del 2026-09-20; ver el propio
+documento y TODO.md sección 2bis para el detalle. Quedan solo residuales de
+implementación derivados de esas respuestas (spec de reemplazo de Relay aún sin
+escribir; diseño de concurrencia interna de Janus en spec 11).
 
 ## Bloqueos y fases 0
 * Spec 08: verificar la licencia de `ssoj13/filesystem-mcp-rs` antes de forkear.
 * Specs 10, 12 y 14 empiezan con auditoría o spike; no escribir código antes de aprobar su resultado.
 * Spec 13: medir Kokoro en el Raspberry Pi (`bench`) antes de comprometer la voz local.
 
-## Última sesión
-Se archivaron los ADRs, se escribieron las 15 specs (incluidas dos nuevas, voz y adaptadores concretos), se reordenó el plan con `proto/` primero, se corrigieron `docs/README.md` y varios documentos con lo verificado en septiembre de 2026 (filesystem MCP, Claude Desktop en Linux, Wayland en Raspberry Pi OS, Kokoro en el Pi).
+## Última sesión (2026-09-20)
+Se corrigió spec 09: el residual de la pregunta 1 de `architecture/09` no era un enum
+cerrado (`fallback`/`block`/`ask`) sino dos piezas separadas — una `FallbackChain`
+declarativa de N pasos que el usuario define, y un `FailureTriageAdvisor` que es un
+juicio de Janus en runtime sobre si seguir la cadena o escalar al usuario, no una tabla
+fija. Se cerraron las cuatro preguntas que quedaban abiertas en `architecture/09`:
+política de seguimiento de OpenClaw (sin cadencia fija, solo ante disparador), OpenClaude
+(nunca se extiende, solo consumo como spoke), multi-usuario (redefinida como
+concurrencia interna de Janus por canales, no multi-tenencia), alcance de GUI de fábrica
+(genérico más adaptadores adicionales a definir) y futuro de Relay (se rehace su función
+desde cero como spoke propio de Janus, portable, reemplazando a `claude-toolkit`).
+Quedan dos residuales de implementación nuevos: la spec del spoke que reemplaza a Relay
+(sin número aún) y el diseño de concurrencia interna de Janus en spec 11.

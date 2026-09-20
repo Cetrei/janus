@@ -89,12 +89,33 @@ confirme (el detalle y la tabla completa están en `docs/specs/README.md`):
       (residual de la pregunta 11, spec 12).
 - [ ] Variantes de `approval` (`ask_once_per_session`, `deny_always`) (specs 02 y 09).
 - [ ] Modelo de embeddings `intfloat/multilingual-e5-small` (specs 03 y 07).
-- [ ] Política de seguimiento de OpenClaw: revisión mensual filtrada a seguridad y
-      cambios de canales (spec 14).
+- [x] Política de seguimiento de OpenClaw: sin cadencia fija, solo ante un disparador
+      concreto (CVE público o canal roto). Confirmado (spec 14, `stack/05`).
 
-Preguntas de `architecture/09` que las specs no resuelven y siguen ABIERTAS: 5
-(procedencia de OpenClaude), 9 (multi-usuario), 12 (alcance de apps GUI de fábrica) y
-13 (futuro de Relay).
+---
+
+## 2bis. Preguntas de `architecture/09` que quedaban abiertas — RESUELTAS EN ESTA RONDA
+
+Las cuatro preguntas de `architecture/09` que ninguna spec resolvía quedaron cerradas
+(detalle completo en el propio documento):
+
+- [x] Pregunta 5 (procedencia de OpenClaude): cerrada, nunca se extiende ese código
+      base, solo consumo como spoke vía protocolo.
+- [x] Pregunta 9 (multi-usuario): redefinida. No es multi-tenencia; es concurrencia
+      interna de Janus para atender al mismo usuario por canales distintos a la vez
+      (ej. voz desde la cocina mientras programa por texto). Queda un residual de
+      diseño nuevo en `specs/spec-11-core-gateway.md` (Open Questions).
+- [x] Pregunta 12 (alcance de GUI de fábrica): mecanismo genérico más un puñado de
+      adaptadores adicionales de fábrica, más allá de Claude/Gemini Desktop. Lista
+      concreta pendiente como tarea de producto, no bloquea arquitectura.
+- [x] Pregunta 13 (futuro de Relay): Relay (`claude-toolkit`) no se adopta ni se
+      migra tal cual (atado a Linux); se reescribe su función desde cero, portable y
+      dinámica, como spoke propio de Janus (código en el monorepo, no spoke externo).
+      Reemplaza a Relay por completo. Sin spec propia todavía; se agrega al planificar
+      el kanban.
+
+Preguntas de `architecture/09` que las specs no resuelven y siguen ABIERTAS: ninguna.
+Las cuatro que quedaban (5, 9, 12, 13) se resolvieron en esta ronda; ver sección 2bis.
 
 ---
 
@@ -127,11 +148,19 @@ specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
 
 ## 4. Trabajo previo a la implementación
 
-- [ ] Confirmar o ajustar las decisiones propuestas de la sección 2.
+- [ ] Confirmar o ajustar las decisiones propuestas de la sección 2 restantes (ver 2bis
+      para las de `architecture/09`, ya cerradas).
 - [ ] Verificar la licencia de `ssoj13/filesystem-mcp-rs` (bloqueante de la spec 08) y
       decidir base alternativa si no hay licencia compatible con MIT.
 - [ ] Confirmar la licencia del commit de OpenClaw que se forkeará (el README indica
       MIT) y del de Hermes (MIT verificado en el README).
+- [ ] Escribir la spec del spoke propio que reemplaza a Relay/`claude-toolkit`
+      (residual de la pregunta 13 de `architecture/09`): función de Relay rehecha,
+      dinámica y multiplataforma, orquestando múltiples perfiles/instancias de un
+      mismo harness. No existía dueño antes de esta ronda; se agrega como spec 16 o
+      se incorpora a la 15, a decidir al planificar el kanban.
+- [ ] Incorporar a la spec 11 el diseño de concurrencia interna de Janus (múltiples
+      `SESSION_KIND_JANUS_MAIN` en paralelo por canal, residual de la pregunta 9).
 - [ ] Crear kanban (GitHub Projects u otra herramienta) a partir de las specs ya
       escritas: cada spec se descompone en tareas concretas, no al revés. Las fases 0
       (auditorías y spikes de las specs 8, 10, 12 y 14) son tareas explícitas.

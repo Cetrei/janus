@@ -98,13 +98,36 @@ base y tokens generados por el usuario para los spokes externos, verificados en 
 request entrante al Core de Traducción (`stack/08-seguridad-y-observabilidad.md`,
 sección 1).
 
-**Residual abierto:** cómo se verifica que quien emite una orden de control a través de
-un canal de mensajería o de voz es el usuario legítimo. Los tokens cubren el acceso de
-componentes y spokes al Core de Traducción, no la identidad del remitente en el canal.
+**Resolución del residual, según el usuario:** la revalidación del núcleo (segunda
+capa, sobre el pairing/allowlist ya provisto por `channel-gateway`) combina hasta tres
+señales, todas configurables de forma independiente por canal:
+
+1. **Identificador por plataforma** (número de WhatsApp, user ID de Discord, etc.):
+   el default de menor fricción, comparación mecánica simple contra `identity.owner`.
+2. **Desafío redactable en `.md`**: un texto libre (pregunta, frase clave, lo que sea)
+   que el usuario escribe una vez y que se incrusta en el contexto del agente para esa
+   sesión. El agente puntúa la respuesta del remitente contra ese desafío con su
+   propio juicio (no comparación exacta de string) y llama a una tool
+   (`mark_sender_verified` o equivalente) cuando decide que la identidad quedó
+   validada. Hasta ese momento el remitente cuenta como no verificado aunque el canal
+   ya lo tenga en su lista de permitidos.
+3. **Biometría local** (ver pregunta 14 de este documento, nueva): reconocimiento de
+   voz y/o cara corriendo en hardware del hogar, como tercera señal.
+
+Las tres son composables por canal: un canal puede usar solo una, dos, las tres, o
+ninguna (degradando a confiar en el pairing del gateway). La vigencia de una
+verificación exitosa por desafío `.md` también es configurable por canal/ámbito
+(`owner_reverify: "never" | "per_session" | "always"`) — ejemplo dado por el usuario:
+desde la PC (interacción directa) nunca se pide, desde WhatsApp se pide una vez por
+chat nuevo, desde un speaker de la casa se pide siempre.
 
 **Propuesta pendiente de confirmar** (`specs/spec-11-core-gateway.md` y
 `specs/spec-14-channel-gateway.md`): verificación en dos capas, con el emparejamiento y la
 lista de permitidos del gateway más una revalidación en el núcleo contra `identity.owner`.
+Esta propuesta se mantiene como el mecanismo base (señal 1); las señales 2 y 3 son la
+extensión confirmada por el usuario en esta ronda, y quedan como trabajo de diseño
+nuevo para las specs 11 y 14 (campo `owner_reverify` por canal, mecanismo de desafío
+`.md` y tool `mark_sender_verified`, e integración con la biometría de la pregunta 14).
 
 ## 4. Gobernanza y licencia de Hermes — RESUELTA
 **Origen:** `08-mapa-de-componentes-reales.md`, sección 1.
@@ -213,7 +236,7 @@ múltiples sesiones con subagentes en `agents/04` sección 3? ¿o algo distinto?
 el caso de múltiples canales de entrada del mismo usuario. Se traslada a `/spec` de
 `apps/core-gateway` (spec 11) como requisito nuevo a incorporar.
 
-## 10. Política de resolución de errores en cascada entre tareas dependientes — ABIERTA
+## 10. Política de resolución de errores en cascada entre tareas dependientes — RESUELTA
 **Origen:** `05-modelo-de-roles-y-tareas.md`, sección 4.
 
 Se estableció que una tarea puede depender de otra y que el núcleo no debe iniciarla
@@ -225,9 +248,13 @@ reintento.
 Las políticas de fallo de `stack/09-politicas-de-fallo.md` se declaran por harness o
 spoke y no cubren dependencias entre tareas.
 
-**Propuesta pendiente de confirmar** (`specs/spec-11-core-gateway.md`): cada tarea lleva
-`on_dependency_failure` con valores `BLOCK` (por defecto), `CANCEL` y `RETRY_REASSIGN`.
-La pregunta sigue ABIERTA hasta que se confirme.
+**Resolución, según el usuario:** no es una política estática por tarea (`BLOCK` |
+`CANCEL` | `RETRY_REASSIGN` como enum fijo). Es el mismo patrón ya confirmado para el
+fallback de capacidades (pregunta 1): Janus, como agente orquestador, decide en
+runtime si el fallo de una dependencia es mitigable reintentando o si amerita
+discutirse con el usuario — no una tabla codificada de antemano. Ver
+`specs/spec-11-core-gateway.md`, requisito 20 (`DependencyFailureTriage`), para el
+diseño concreto.
 
 ## 11. Tecnología concreta para detección de elementos y síntesis de input en automatización de interfaz gráfica — PARCIALMENTE RESUELTA
 **Origen:** `10-automatizacion-de-interfaz-grafica.md`, secciones 3 y 4.
@@ -255,6 +282,12 @@ elementos y para inyección de input, diferida a la fase `/spec` de ese componen
 ventanas intercambiables según el compositor, con un spike de validación antes de fijar
 la API. Se advierte que Wayland no ofrece una API única y que Raspberry Pi OS lo usa por
 defecto.
+
+**Confirmación del usuario:** el enfoque general (detección por árbol de
+accesibilidad, en vez de visión/OCR como estrategia primaria) queda confirmado. Las
+librerías específicas (`atspi`, `xcap`, `enigo`) quedan como candidatas a revisar
+cuando se ejecute el spike de la fase 0 de la spec 12, tal como esa spec ya lo trata —
+no se fija su elección final todavía.
 
 ## 12. Alcance de aplicaciones soportadas de fábrica vía automatización de interfaz gráfica — RESUELTA
 **Origen:** `10-automatizacion-de-interfaz-grafica.md`, sección 1.
@@ -299,3 +332,42 @@ más allá del tiempo que tome la reescritura.
 inicio, no solo Linux) que reemplaza a `claude-toolkit`/Relay. No tiene spec propia
 todavía entre las 15 escritas; se agrega como spec nueva o se incorpora a la 15
 (adaptadores concretos de spoke) al planificar el kanban.
+
+## 14. Reconocimiento biométrico de voz y cara como señal de identidad — RESUELTA A NIVEL DE ALCANCE, DETALLE DIFERIDO A `/spec`
+**Origen:** discusión de la sesión 2026-09-20, a raíz del residual de la pregunta 3
+(identidad de remitente por canal).
+
+Surgió al discutir cómo verificar al dueño en canales de voz/hogar (ejemplo del
+usuario: un speaker en la cocina). Es una capacidad nueva, sin precedente en
+`agents/05-voz.md` (que cubre síntesis y transcripción, STT/TTS, no reconocimiento de
+hablante ni reconocimiento facial).
+
+**Alcance confirmado por el usuario:**
+- **Sensores:** voz y cámara, ambos soportados; el usuario decide qué dispositivos
+  conectar (pueden ser varios, de distintos medios) y en qué canales/ámbitos activar
+  cada uno.
+- **Relación con las otras señales de identidad (pregunta 3):** totalmente
+  configurable por canal — la biometría puede convivir con el desafío `.md`, con el
+  identificador de plataforma, con ambas, o operar sola. No hay una regla única de
+  "reemplaza" o "complementa"; es una matriz de configuración por canal.
+- **Procesamiento:** local, sin nube. Los modelos de reconocimiento corren en el
+  hardware del hogar (Raspberry Pi u otro), consistente con el criterio ya fijado en
+  `stack/01-contexto-y-lenguajes.md` de bajo consumo y sin dependencias externas
+  obligatorias. Esto descarta explícitamente servicios de reconocimiento en la nube
+  para esta capacidad, por la naturaleza sensible de datos biométricos.
+
+**Lo que esto NO fija (queda para `/spec` cuando se planifique este componente):**
+- Modelo(s) concretos de reconocimiento de voz (speaker verification/identification) y
+  de cara (face recognition), y su viabilidad de rendimiento en el hardware objetivo
+  (mismo tipo de compuerta de rendimiento que ya se aplicó a Kokoro en la spec 13).
+- Dónde y cómo se almacenan los embeddings biométricos de referencia del dueño
+  (nunca la señal cruda de voz/imagen persistida más allá de lo necesario para
+  generar el embedding), y su protección en reposo.
+- Umbral de confianza para aceptar una coincidencia y comportamiento ante
+  incertidumbre (¿cae al desafío `.md` si la confianza es baja? ¿bloquea? ¿pregunta?).
+- A qué tipo de spoke pertenece esta capacidad en términos del contrato
+  (`03-contrato-de-spoke.md`) — probablemente una capacidad propia de Janus expuesta a
+  través del flujo de canales (similar en espíritu a la voz de `stack/05` sección 3:
+  invocación de Janus, no un harness externo), a confirmar al escribir la spec.
+- Sin spec propia todavía; se agrega al planificar el kanban, probablemente
+  dependiente de o adyacente a la spec 13 (`libs/voice/`).

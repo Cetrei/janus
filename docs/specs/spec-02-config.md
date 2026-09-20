@@ -37,7 +37,9 @@ Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de 
 12. `selection`: política por patrón de capacidad (glob) con `policy` (`priority`, `pinned`) y `spokes` ordenados, más `on_preferred_unavailable` (`fallback` por defecto, `block`, `ask`), `role_hints` (tabla `rol -> lista de tipos de spoke preferidos`, por ejemplo `implementer = ["execution"]`), `max_route_depth` (default 4), `heartbeat_ttl_s` (default 30) y `specialties` (tabla `categoría -> tipo de agente`). Ver spec 09.
 13. `failure`: valores por defecto de la política de fallo, con override por harness o spoke.
 14. `agents`: `root` (default `config/agents`), `catalog_root` (default `config/catalog`), y `types.<tipo>.max_concurrent` (`agents/07`). El tipo `janus` no admite `max_concurrent` (exento).
-15. `approval`: política de aprobación de cambio de proveedor con valores `ask_everytime`, `ask_once_per_session`, `allow_always`, `deny_always`; global y con override por agente (`agents/06`). Las variantes intermedias son una propuesta (ver Open Questions).
+15. `approval`: política de aprobación de cambio de proveedor con cuatro valores
+    confirmados, `ask_everytime`, `ask_once_per_session`, `allow_always` y
+    `deny_always`; global y con override por agente (`agents/06`).
 16. `memory`: `embedding_model` y `embedding_dim` (spec 07), `top_k_default`.
 17. `voice`: proveedores por defecto de TTS y STT (spec 13).
 18. `observability`: `log_level`, `ring_buffer_size` (default 5000), rotación y canales Redis (spec 06).
@@ -253,7 +255,9 @@ ConfigWatcher(paths: Sequence[Path], interval_s: float = 2.0, debounce_ms: int =
 ## Open Questions
 - [ ] Confirmar `config/agents/` y `config/catalog/` como ubicación definitiva (propuesta de esta spec).
 - [ ] `filesystem_roots` se agregó por la spec 08; validar que cada raíz exista y que no incluya `config/agents` de otros agentes salvo que el agente sea `Janus`.
-- [ ] Variantes intermedias de `approval` (`ask_once_per_session`, `deny_always`): son una propuesta; `agents/06` solo nombra `ask_everytime` y `allow_always` y "variantes intermedias".
+- [x] Variantes intermedias de `approval` (`ask_once_per_session`, `deny_always`):
+      confirmadas por el usuario, las cuatro forman el conjunto completo. `agents/06`
+      actualizado.
 - [ ] Nombre del paquete: se adopta `janus_config` (espacio plano `janus_*`), que además resuelve la duda de la spec 04.
 - [ ] Puertos por defecto de `core.grpc_port` y `core.mcp_port`: los valores del ejemplo son placeholders.
 

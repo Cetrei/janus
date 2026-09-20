@@ -52,7 +52,11 @@ Todo esto se revalida en la fase 0.
 12. Idempotencia: cada `OutboundMessage.message_id` se entrega como máximo una vez aunque el núcleo lo reenvíe tras una reconexión (tabla de ids recientes acotada).
 
 ### Identidad de remitente y seguridad de entrada
-13. Se conserva tal cual el emparejamiento y la lista de permitidos de OpenClaw como primera capa (`spec 11`, requisito 26). El gateway nunca añade una marca que el núcleo pueda interpretar como "confiable"; el núcleo siempre revalida contra `identity.owner`.
+13. Se conserva tal cual el emparejamiento y la lista de permitidos de OpenClaw como
+    primera capa (`spec 11`, requisito 26). El gateway nunca añade una marca que el
+    núcleo pueda interpretar como "confiable"; el núcleo siempre revalida contra las
+    señales adicionales configuradas para ese canal (`identity.owner`, desafío `.md`,
+    biometría — ver spec 11, requisito 26 y `architecture/09` preguntas 3 y 14).
 14. Un remitente sin emparejar no genera `InboundEvent`. El evento de emparejamiento pendiente se publica al núcleo como metadato de estado (`pairing_pending`) para que Janus pueda avisar al usuario.
 15. Prevención de bucles: el gateway ignora los mensajes cuyo autor es una de sus propias cuentas de bot (incluidas las cuentas `own_bot` de subagentes) para que dos bots no se respondan entre sí.
 
@@ -239,6 +243,11 @@ Códigos de error de entrega (`ErrorInfo.code`): `ACCOUNT_NOT_CONFIGURED`, `CHAN
 - [ ] Biblioteca de gRPC y generador de código TypeScript (candidato: `@grpc/grpc-js` con stubs generados); confirmar que soporta streaming bidireccional con la versión de Node fijada y actualizar la spec 01 con el plugin de `buf`.
 - [x] Política de seguimiento de OpenClaw: confirmada. Sin cadencia fija; solo ante un
       disparador concreto (CVE público o canal roto). Reemplaza la propuesta mensual.
+- [x] Verificación de identidad ampliada: la revalidación del núcleo (requisito 13, ver
+      spec 11 requisito 26) no se limita a `identity.owner`; incluye opcionalmente un
+      desafío `.md` y biometría local, según configuración por canal. El gateway sigue
+      sin conocer esas señales adicionales; solo entrega el `InboundEvent` sin marca de
+      confianza, como ya hacía.
 - [ ] Sección `channels` de `janus.toml` (cuentas, permitidos, límites): se agrega a la spec 02.
 - [ ] Alcance inicial de canales: se sugiere empezar con uno o dos (por ejemplo el que el usuario ya usa) y WebChat para pruebas, y activar el resto por configuración.
 

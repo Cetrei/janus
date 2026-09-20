@@ -13,9 +13,9 @@ El cambio de proveedor de modelo de un agente es **tanto declarativo como dinám
 
 Este mecanismo se modela igual que cualquier otra acción del sistema: **como una tool
 call** (`suggest_provider_change` o equivalente), sujeta a una política de aprobación
-configurable por el usuario, con el mismo vocabulario ya usado en herramientas de
-permisos conocidas: `ask_everytime`, `allow_always`, y variantes intermedias. Esta
-política se declara en `config/janus.toml`, con posibilidad de override por agente.
+configurable por el usuario, con cuatro valores confirmados: `ask_everytime`,
+`ask_once_per_session`, `allow_always` y `deny_always`. Esta política se declara en
+`config/janus.toml`, con posibilidad de override por agente.
 
 Vive en `libs/capabilities/` (Registro de Capacidades), como una extensión de su
 responsabilidad de resolución/selección ya definida en

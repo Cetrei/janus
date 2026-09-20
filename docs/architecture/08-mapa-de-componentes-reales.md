@@ -240,7 +240,7 @@ de escritorio.
 | Hermes            | Harness base (extraído) | ✅ (BYOM) | parcial (sin AST/LSP) | ❌ en Janus (el gateway upstream no se extrae) | ❌ |
 | OpenClaude        | Spoke externo | ✅ | ✅ (fuerte, AST/LSP) | ❌ | ❌ |
 | OpenClaw          | Harness base (fork) | — (delega a harness) | ✅ (vía subprocesos, fuera del alcance recomendado dentro de Janus) | ✅ | ❌ |
-| Relay             | Sin definir (ver `09-preguntas-abiertas.md`, pregunta 13) | ✅ (orquesta perfiles de un spoke) | ❌ | ❌ | ❌ |
+| Relay             | Reemplazado por spoke propio reescrito (ver `09-preguntas-abiertas.md`, pregunta 13, RESUELTA) | ✅ (orquesta perfiles de un spoke) | ❌ | ❌ | ❌ |
 | Claude Desktop    | Spoke externo | ✅ | ❌ | ❌ | ✅ (única vía disponible) |
 | Gemini Desktop    | Spoke externo | ✅ | ❌ | ❌ | ✅ (única vía disponible) |
 
@@ -256,7 +256,7 @@ clasificación narrativa de cada sección anterior.
   relaciona con el Registro de Capacidades.
 - `10-automatizacion-de-interfaz-grafica.md` — el mecanismo concreto que implementa el
   adaptador de Claude Desktop y Gemini Desktop.
-- `09-preguntas-abiertas.md` — procedencia de OpenClaude y futuro de Relay dentro de
-  Janus, aún no resueltos.
+- `09-preguntas-abiertas.md` — procedencia de OpenClaude, futuro de Relay y
+  reconocimiento biométrico de identidad, todos resueltos.
 - `stack/05-harnesses-hermes-openclaw.md` — decisión de tratar a Hermes y OpenClaw como
   harnesses base, y cómo se integra cada uno.

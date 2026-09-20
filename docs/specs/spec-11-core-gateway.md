@@ -53,7 +53,18 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
 17. Planificador: una tarea `PENDING` con todas sus dependencias `COMPLETED` pasa a ejecución. Varias tareas listas corren en paralelo, sujetas al tope por tipo de agente (spec 09). El progreso de una no bloquea a las demás salvo dependencia explícita.
 18. Asignación rol a spoke: `RoleAssigner` mapea el rol a las capacidades que requiere (`roles.<rol>.capability`, por defecto `execution.run_task` para Implementer y Debugger, `reasoning.complete` para Architect, Documenter y DevOps según la config) y elige proveedor con el `Router`. Se guarda en `task_assignments` para trazabilidad. `Control.AssignRole` permite anular manualmente.
 19. Reasignación: si el spoke que ejecuta un rol queda `UNAVAILABLE` o el circuito se abre, las tareas `PENDING` se reasignan a otro candidato. Las tareas `RUNNING` interrumpidas pasan a `BLOCKED` con motivo y solo se reasignan solas si la capacidad es idempotente; en otro caso decide el usuario o Janus (`architecture/05` sección 2 y spec 09, requisito 15).
-20. Falla una dependencia (residual de la pregunta 10 de `architecture/09`): se aplica `on_dependency_failure` de cada tarea dependiente. Valores: `BLOCK` (default propuesto: la dependiente pasa a `BLOCKED` con motivo y el usuario o Janus decide), `CANCEL` (cancelación en cascada) y `RETRY_REASSIGN` (reintenta la dependencia en otro spoke hasta `task.max_attempts`, default 2, solo si es idempotente). Esta política es una propuesta a confirmar.
+20. Falla una dependencia (residual de la pregunta 10 de `architecture/09`): no es una
+    política estática por tarea. El mismo patrón que `FailureTriageAdvisor` de la spec
+    09 (juicio de Janus, no tabla fija): al fallar una dependencia, Janus puntúa si es
+    mitigable reintentando (misma tarea u otro spoke, solo si la capacidad es
+    idempotente) o si amerita discutirse con el usuario. `TaskOrchestrator` expone este
+    juicio como `DependencyFailureTriage.decide(dependency: Task, dependents: list[Task])
+    -> DependencyVerdict` con valores `RETRY`, `CANCEL_CASCADE`, `ASK_USER`;
+    `ASK_USER` usa `ApprovalGateway` igual que el resto de los puntos de decisión de
+    Janus. Mientras Janus delibera, la tarea dependiente queda `BLOCKED` con motivo.
+    Reemplaza al enum estático `on_dependency_failure` (`BLOCK` | `CANCEL` |
+    `RETRY_REASSIGN`) de la propuesta original de esta spec, que no dejaba lugar al
+    juicio de Janus por tipo de fallo. Confirmado por el usuario.
 21. `Control.PauseTask`, `ResumeTask` y `CancelTask`: cancelar aborta la invocación en curso con `aclose()` y marca `CANCELLED`; pausar una tarea `PENDING` la deja en `BLOCKED(paused)`; pausar una `RUNNING` cancela la invocación y la deja `BLOCKED(paused)` para reanudarla con una ejecución nueva sobre la misma sesión (no hay pausa a mitad de una llamada externa).
 
 ### Sesiones
@@ -63,7 +74,21 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
 
 ### Flujo de canales
 25. `ChannelBridge.Stream` conecta con `channel-gateway` (spec 14). Por cada `InboundEvent`: verificación de identidad (requisito 26), ubicación de la sesión, envío a Janus, y respuesta como `OutboundMessage`.
-26. Verificación de identidad en dos capas, propuesta para el residual de la pregunta 3 de `architecture/09`: (a) `channel-gateway` aplica el emparejamiento y la lista de permitidos que trae OpenClaw; (b) el núcleo revalida contra `identity.owner` de la config. Un remitente no reconocido se descarta con un log de seguridad y no llega a Janus (por defecto). El campo `sender` es siempre dato no confiable y nunca autoriza nada por sí solo. Las órdenes de control emitidas por chat las ejecuta Janus como tool calls, solo para identidades verificadas.
+26. Verificación de identidad en tres señales compuestas, configurables por canal,
+    confirmadas por el usuario para el residual de la pregunta 3 de `architecture/09`:
+    (a) `channel-gateway` aplica el emparejamiento y la lista de permitidos que trae
+    OpenClaw; (b) el núcleo revalida contra `identity.owner` de la config (identificador
+    por plataforma, default de menor fricción); (c) opcionalmente, un desafío
+    redactable en `.md` que el usuario define libremente, incrustado en el contexto del
+    agente para esa sesión, evaluado por el propio agente (no comparación exacta) y
+    confirmado con la tool `mark_sender_verified`; (d) opcionalmente, una señal
+    biométrica local de voz/cara (pregunta 14 de `architecture/09`). Las señales (b),
+    (c) y (d) son composables por canal según `owner_reverify: "never" | "per_session"
+    | "always"` y los flags de biometría habilitados para ese canal; un remitente no
+    reconocido en ninguna señal activa se descarta con un log de seguridad y no llega a
+    Janus (por defecto). El campo `sender` es siempre dato no confiable y nunca autoriza
+    nada por sí solo. Las órdenes de control emitidas por chat las ejecuta Janus como
+    tool calls, solo para identidades verificadas según la configuración de ese canal.
 27. Identidad visual (`agents/04` sección 4): por defecto solo Janus habla en el canal. Los mensajes de un subagente solo se publican para sesiones a las que el usuario se suscribió, con `SpeakerIdentity` según `channel_identity` del agente (`own_bot` o `shared_with_prefix`, este último con prefijo de texto sobre el bot de Janus).
 28. Voz: si el agente activo tiene `voice_provider` y el canal admite audio, el texto de la respuesta pasa por `libs/voice` (spec 13) antes de enviarse como audio, con fallback a texto si la síntesis falla. Un audio entrante se transcribe con STT antes de llegar a Janus. La invocación de voz es del núcleo, no una función activada dentro del motor (`stack/05` sección 3).
 29. Entrega fallida: si `DeliveryReceipt.delivered = false`, se aplica la `FailurePolicy` de `harnesses.channel-gateway`; agotada, se registra y se notifica por `Observe`.
@@ -112,10 +137,26 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
 * **Reason**: el motor no importa `libs/capabilities`; el núcleo ya conoce el rol de la solicitud.
 * **Rejected alternatives**: que el adaptador del motor gestione la cola (acopla adaptador y capacidades).
 
-### Verificación de identidad por dos capas
-* **Chosen**: emparejamiento en `channel-gateway` y lista `identity.owner` revalidada en el núcleo.
-* **Reason**: defensa en profundidad; los tokens no cubren la identidad del remitente (spec 05).
-* **Rejected alternatives**: confiar solo en el gateway (un fork con bug abriría acceso total).
+### Verificación de identidad en múltiples señales por canal
+* **Chosen**: emparejamiento en `channel-gateway`, más `identity.owner` revalidado en el
+  núcleo, más dos señales adicionales opcionales por canal (desafío `.md`, biometría
+  local).
+* **Reason**: defensa en profundidad; los tokens no cubren la identidad del remitente
+  (spec 05); el usuario pidió flexibilidad explícita por ámbito (PC nunca repregunta,
+  WhatsApp una vez por chat, speaker de casa siempre).
+* **Rejected alternatives**: confiar solo en el gateway (un fork con bug abriría acceso
+  total); una única señal fija sin composición por canal (no cubre el caso del speaker).
+
+### Falla de dependencia decidida por Janus, no por un enum estático
+* **Chosen**: `DependencyFailureTriage.decide` como juicio de Janus en runtime (`RETRY`,
+  `CANCEL_CASCADE`, `ASK_USER`), mismo patrón que `FailureTriageAdvisor` de la spec 09.
+* **Reason**: el usuario confirmó el mismo criterio en ambos casos (fallback de
+  capacidades y cascada de dependencias): Janus, como agente orquestador, es quién
+  asigna las tareas y debe saber cuándo un fallo se soluciona reintentando o debe
+  discutirse con el usuario, en lugar de una tabla fija codificada de antemano.
+* **Rejected alternatives**: enum estático `on_dependency_failure` (`BLOCK` | `CANCEL` |
+  `RETRY_REASSIGN`), propuesta original de esta spec, insuficiente por la misma razón
+  que se descartó en spec 09.
 
 ### Pausa como cancelación más reanudación
 * **Chosen**: no hay pausa a mitad de una llamada externa.
@@ -185,6 +226,7 @@ Transición válida       PENDING->RUNNING|BLOCKED|CANCELLED ; RUNNING->COMPLETE
 Entity ChannelBinding   { platform, channel_id, account_id -> session_id }
 Entity ApprovalRequest  { approval_id, kind, summary, requested_at, timeout_s, status }
 Entity HarnessState     { name, running: bool, restarts: int, last_error?, connected: bool }
+Enum   DependencyVerdict { RETRY, CANCEL_CASCADE, ASK_USER }
 ```
 
 Configuración adicional en `janus.toml`: `roles.<rol>.capability` y `task.max_attempts` (se suman a la spec 02), `approval.timeout_s`, `harnesses.channel-gateway.command`.
@@ -217,7 +259,7 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
 | Dos núcleos sobre la misma base | El candado de instancia impide el segundo arranque. |
 | `channel-gateway` se cae | El supervisor lo reinicia según la política; mientras tanto, las respuestas salientes se encolan de forma acotada y se descartan las más antiguas con aviso. |
 | Remitente desconocido en canal | Se descarta con log de seguridad; no llega a Janus. |
-| Dependencia falla | Se aplica `on_dependency_failure` de cada dependiente. |
+| Dependencia falla | Janus decide vía `DependencyFailureTriage`: `RETRY` reintenta la dependencia (mismo o distinto spoke, si es idempotente), `CANCEL_CASCADE` cancela en cascada, `ASK_USER` pregunta. La tarea dependiente queda `BLOCKED` mientras se decide. |
 | Ciclo de dependencias al crear tarea | `FAILED_PRECONDITION`; no se inserta nada. |
 | Spoke que ejecuta un rol se cae con tarea `RUNNING` | La tarea pasa a `BLOCKED`; se reasigna sola solo si es idempotente. |
 | Usuario se suscribe a una sesión ya cerrada | `FAILED_PRECONDITION`. |
@@ -232,7 +274,7 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
 
 ## Testing Requirements
 
-**Unit Tests**: máquina de estados de tareas (todas las transiciones válidas e inválidas); Kahn y detección de ciclos; planificador con dependencias y paralelismo; políticas `on_dependency_failure`; `BoundCoreGateway` (suplantación imposible); verificación de identidad; `ApprovalGateway` con éxito, denegación y timeout; recarga de configuración con cambio válido, inválido y que exige reinicio.
+**Unit Tests**: máquina de estados de tareas (todas las transiciones válidas e inválidas); Kahn y detección de ciclos; planificador con dependencias y paralelismo; `DependencyFailureTriage` con cada verdict; `BoundCoreGateway` (suplantación imposible); verificación de identidad con cada combinación de señales activas por canal; `ApprovalGateway` con éxito, denegación y timeout; recarga de configuración con cambio válido, inválido y que exige reinicio.
 
 **Integration Tests**: arranque completo con `EchoAdapter`, un `FakeChannelBridge` y una base temporal; cliente gRPC de prueba que registra un spoke dinámico con token y lo invoca; caída y reconexión de un spoke; caída y reinicio de `channel-gateway` simulado; ciclo de canal completo (entrante, Janus con proveedor falso, saliente); suscripción a una sesión de tarea con escritura directa; reinicio del proceso con recuperación; pruebas de carga con 20 solicitudes concurrentes.
 
@@ -251,8 +293,16 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
 ---
 
 ## Open Questions
-- [ ] Política de cascada por defecto (`BLOCK`) y valor `RETRY_REASSIGN`: residual abierto de la pregunta 10 de `architecture/09`; confirmar.
-- [ ] Identidad de remitente por dos capas: propuesta para el residual de la pregunta 3; confirmar.
+- [x] Cascada de dependencia fallida (residual de la pregunta 10 de `architecture/09`):
+      confirmado por el usuario que no es un enum estático. Reemplazado por
+      `DependencyFailureTriage`, el mismo patrón de juicio de Janus en runtime que
+      `FailureTriageAdvisor` de la spec 09.
+- [x] Identidad de remitente por múltiples capas: confirmado por el usuario como cuatro
+      señales composables por canal (pairing del gateway, `identity.owner` por
+      plataforma, desafío `.md` evaluado por el agente, biometría local). Falta el
+      diseño concreto de `owner_reverify` y `mark_sender_verified` (nuevo, sin escribir
+      todavía) y la integración con la capacidad de biometría de la pregunta 14 de
+      `architecture/09` (sin spec propia aún).
 - [ ] Concurrencia interna de Janus (pregunta 9 de `architecture/09`, confirmado como requisito): Janus debe atender múltiples `SESSION_KIND_JANUS_MAIN` de distintos canales del mismo usuario en paralelo, sin serializar una detrás de otra. Falta el diseño concreto: si cada sesión principal corre en su propia task de asyncio de forma independiente, qué recursos compartidos (memoria, persistencia, toolset) requieren lock y cuáles no.
 - [ ] Nombre de tool MCP derivado de `capability_id`: verificar caracteres admitidos por el SDK de MCP al implementar.
 - [ ] Mapa `roles.<rol>.capability`: valores iniciales propuestos; ajustar con el uso real.

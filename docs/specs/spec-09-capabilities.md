@@ -87,7 +87,12 @@ Una vez implementada, `core-gateway` resuelve cualquier solicitud de capacidad s
 ### Cambio dinámico de proveedor (`agents/06`)
 29. `ProviderChangeAdvisor.on_provider_failure(agent, provider, failure)` observa fallos repetidos de un proveedor (reportados por el motor, spec 10) y, superado `provider_failure_threshold` (default 3 en 5 minutos), produce un `ProviderChangeSuggestion(agent, from, to, reason)` con el siguiente proveedor sano de una lista declarada en la config del agente.
 30. La sugerencia se expone como tool call `suggest_provider_change(agent, to_provider, reason)` dentro del toolset de Janus, y también la puede generar el asesor de forma automática para que Janus la vea como evento.
-31. `ApprovalPolicy` (config `approval.provider_change`, con override por agente): `ask_everytime`, `ask_once_per_session`, `allow_always` y `deny_always`. Con `ask_*` se usa `ApprovalGateway` (puerto implementado por el núcleo, que pregunta al usuario por su canal y devuelve la respuesta).
+31. `ApprovalPolicy` (config `approval.provider_change`, con override por agente),
+    cuatro valores confirmados: `ASK_EVERYTIME`, `ASK_ONCE_PER_SESSION`,
+    `ALLOW_ALWAYS` y `DENY_ALWAYS`. Con `ASK_*` se usa `ApprovalGateway` (puerto
+    implementado por el núcleo, que pregunta al usuario por su canal y devuelve la
+    respuesta); `ASK_ONCE_PER_SESSION` cachea la respuesta aprobatoria mientras dure la
+    sesión del agente y vuelve a preguntar en la siguiente.
 32. Aplicar el cambio significa fijar un override `agent_provider_override.<agente>` en `preferences` y pedir al runtime el reinicio del agente (el proveedor es un campo `requires_restart`, spec 02). No se reescribe `agent.toml`, para no pelear con ediciones del usuario. Retirar el override devuelve el proveedor declarado.
 
 ---
@@ -274,7 +279,9 @@ Errores: NoCandidate, PreferredUnavailable, RouteDepthExceeded, CapabilityIdInva
 - [ ] Forma exacta de declarar una `FallbackChain` en `config/janus.toml` (sintaxis TOML para una secuencia de N pasos heterogéneos: spoke, proveedor, "esperar"). Pendiente para la spec 02.
 - [ ] Qué insumo concreto usa `FailureTriageAdvisor` para su juicio ademas de `FailureEvent.kind` e historial reciente (p. ej., si consulta al motor de razonamiento como una invocación más, o si es lógica propia de `libs/capabilities`). Pendiente de decidir antes de implementar `fallback.py`.
 - [ ] `role_hints` y `max_route_depth` se agregan a la sección `selection` de la spec 02.
-- [ ] Variantes intermedias de `ApprovalPolicy` (`ask_once_per_session`, `deny_always`): propuesta, `agents/06` solo fija `ask_everytime` y `allow_always`.
+- [x] Variantes intermedias de `ApprovalPolicy` (`ask_once_per_session`, `deny_always`):
+      confirmadas por el usuario, las cuatro (`ASK_EVERYTIME`, `ASK_ONCE_PER_SESSION`,
+      `ALLOW_ALWAYS`, `DENY_ALWAYS`) forman el conjunto completo. `agents/06` actualizado.
 - [ ] Persistencia de la ventana de fallos: se deja en memoria; reevaluar si el usuario quiere que un circuito abierto sobreviva a reinicios.
 
 ---

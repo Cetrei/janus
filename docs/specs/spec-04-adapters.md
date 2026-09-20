@@ -296,7 +296,7 @@ Jerarquía de errores (todos extienden `AdapterError`):
 ---
 
 ## Open Questions
-- [ ] Versión mínima de Python: 3.11 es propuesta (el stack no la fija; el uso de `tomllib` en la spec 02 la justifica).
+- [x] Versión mínima de Python: 3.11, confirmada (el uso de `tomllib` en la spec 02 la justifica).
 - [ ] Puerto de GUI (`GuiSurface`: localizar ventana, detectar elementos, activar) y su relación con `crates/gui-automation`: definido en la spec 12 y consumido en la spec 15.
 - [ ] Dónde se guarda la configuración asistida de `ASSISTED`: propuesta en la spec 12 (tabla `preferences` de SQLite vía el núcleo, no en el adaptador).
 

@@ -40,8 +40,9 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 
 | Decisión | Spec | Estado |
 |---|---|---|
-| Ubicación de agentes: `config/agents/<Nombre>/`; catálogo compartido en `config/catalog/` | 02 | Propuesta (resuelve 1.6 del TODO) |
-| Paquetes Python con espacio plano `janus_*`; Python 3.11 o superior | 02, 04 | Propuesta |
+| Ubicación de agentes: `config/agents/<Nombre>/`; catálogo compartido en `config/catalog/` | 02 | Confirmada (resuelve 1.6 del TODO) |
+| Paquetes con prefijo `janus` en todos los lenguajes (`janus_*` en Python, `janus-*` en Rust, `@janus/*` en TypeScript); Python 3.11 o superior | 02, 04 | Confirmada (ver `stack/02` sección 4) |
+| Un workspace por ecosistema: `uv` (Python), Cargo (Rust) y bun (TypeScript), cada uno con su lockfile en la raíz | todas | Confirmada (ver `stack/02` sección 3). Bun frente al fork de OpenClaw, por validar en la fase 0 de la spec 14 |
 | Extensión de `proto/` con 5 archivos más (`common`, `session`, `channel`, `spoke`, `gateway`) | 01 | Decidido en la spec |
 | Código generado de protobuf commiteado al repo (las remote plugins de buf requieren red) | 01 | Decidido en la spec |
 | Tokens: `jns_<id>.<secret>`, SHA 256 con sal (no KDF lento) | 05 | Decidido en la spec |
@@ -52,6 +53,7 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 | Cambio de proveedor: override en `preferences`, no reescribir `agent.toml` | 09 | Decidido en la spec |
 | Cascada de dependencias fallidas decidida por Janus en runtime (`DependencyFailureTriage`), no un enum estático (pregunta 10) | 11 | Confirmada |
 | Identidad de remitente en capas: pairing del gateway, `identity.owner` por plataforma, secreto compartido en `.md` validado por el agente y biometría local opcional (residual de la pregunta 3) | 02, 11, 14 | Confirmada |
+| Vigencia de la verificación por secreto compartido: `owner_reverify` con `never`, `per_message`, `per_session` o `ttl`, configurable por canal; el núcleo reinyecta la información en el prompt cuando vence | 02, 11 | Mecanismo confirmado; default `per_session` elegido por el Architect, revisable |
 | Política de aprobación con cuatro valores: `ask_everytime`, `ask_once_per_session`, `allow_always`, `deny_always` | 02, 09 | Confirmada |
 | `SessionHub` vive en `libs/reasoning-engine` | 10 | Decidido en la spec |
 | Detección de GUI por árbol de accesibilidad AT-SPI; backends intercambiables (residual de la pregunta 11) | 12 | Enfoque confirmado; librerías concretas por validar en el spike |
@@ -68,6 +70,7 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 * Raspberry Pi OS usa Wayland (`labwc`) por defecto; la automatización de GUI no puede asumir X11 (spec 12).
 * Las remote plugins de `buf` exigen conexión con la BSR; de ahí el código generado commiteado (spec 01).
 * `sqlite-vec` es pre v1 (0.1.x) y hubo problemas con wheels aarch64 en versiones previas (specs 03 y 07).
+* Existe un paquete `janus` en PyPI (cola sync/async de aio-libs) cuyo módulo `janus` colisiona con el namespace package `janus` del código generado de protobuf (spec 01).
 * `intfloat/multilingual-e5-small` no figura en la lista integrada de modelos de `fastembed` (se registra con `TextEmbedding.add_custom_model`), y la spec 07 afirmaba lo contrario. `intfloat/multilingual-e5-large` (1024 dimensiones) sí figura, y `fastembed` corrigió su pooling (PR 445), así que hay que fijar una versión que lo incluya. La GPU exige el paquete aparte `fastembed-gpu` (specs 02 y 07).
 
 ## Cómo usar estas specs
@@ -82,8 +85,8 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 
 El stack no las fija; se proponen para que las specs sean coherentes entre sí:
 
-* Python 3.11 o superior, un workspace de `uv`, `ruff`, `mypy` o `pyright`, `pytest` con `pytest-asyncio` e `import-linter` para los contratos de dependencia.
-* Rust estable con `clippy -D warnings`, `cargo audit` y `cargo deny`.
-* Node 22 o superior con `pnpm` para `packages/` y `apps/channel-gateway`.
+* Python 3.11 o superior, un workspace de `uv` con un solo `uv.lock`, `ruff`, `mypy` o `pyright`, `pytest` con `pytest-asyncio` e `import-linter` para los contratos de dependencia.
+* Rust estable, un workspace de Cargo, `clippy -D warnings`, `cargo audit` y `cargo deny`.
+* Node 22 o superior como runtime del fork de OpenClaw, con workspaces de bun para `packages/` y `apps/channel-gateway` (bun frente al fork, por validar en la spec 14).
 * Todo objetivo numérico de rendimiento es una propuesta que se ajusta tras medir en el hardware objetivo.
 * Ninguna spec usa MVC: el proyecto es un sistema de librerías y servicios por capas con puertos (`Protocol`) entre ellas, y esa estructura ya cubre la separación de responsabilidades que MVC buscaría. Ver la nota en `../../TODO.md`.

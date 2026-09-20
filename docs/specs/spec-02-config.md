@@ -44,7 +44,7 @@ Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de 
 17. `voice`: proveedores por defecto de TTS y STT (spec 13).
 18. `observability`: `log_level`, `ring_buffer_size` (default 5000), rotación y canales Redis (spec 06).
 19. `identity.owner`: lista de identidades de canal autorizadas para comandos de control, cada una `{ platform, account_id, user_id }` (spec 11 y spec 14). Es la señal base de la verificación en capas: el identificador por plataforma, con comparación mecánica.
-19a. `channels`: tabla `plataforma -> lista de cuentas` con `account_id`, `role` (`main` o `agent_bot`), `credentials` (`SecretRef`), `allowlist` y límites (`max_attachment_bytes`, tamaño de colas). El núcleo resuelve los secretos y genera el archivo de runtime del `channel-gateway` (spec 14). Por cuenta, además, `owner_reverify` (`never`, `per_session` o `always`) y `owner_challenge_file` (ruta opcional a un `.md` libre con el secreto compartido que el usuario decide, incrustado en el contexto del agente hasta que este lo da por validado con la tool `mark_sender_verified`, spec 11 requisito 26). `owner_reverify` solo tiene efecto si hay `owner_challenge_file`. Los flags de biometría por canal se agregan cuando exista la spec de esa capacidad (pregunta 14 de `architecture/09`).
+19a. `channels`: tabla `plataforma -> lista de cuentas` con `account_id`, `role` (`main` o `agent_bot`), `credentials` (`SecretRef`), `allowlist` y límites (`max_attachment_bytes`, tamaño de colas). El núcleo resuelve los secretos y genera el archivo de runtime del `channel-gateway` (spec 14). Por cuenta, además, `owner_reverify` (`never`, `per_message`, `per_session` o `ttl`; default `per_session`) y `owner_challenge_file` (ruta opcional a un `.md` libre con el secreto compartido que el usuario decide, incrustado en el contexto del agente hasta que este lo da por validado con la tool `mark_sender_verified`, spec 11 requisito 26bis). `owner_reverify_ttl` (duración, por ejemplo `"30m"`) es obligatorio con `ttl` e inválido con cualquier otro valor. `owner_reverify` distinto de `never` exige `owner_challenge_file`; validación cruzada en la carga. Cuando la verificación vence, el núcleo lo detecta al llamar a Janus y reinyecta la información en el prompt (spec 11, requisito 26bis). Los flags de biometría por canal se agregan cuando exista la spec de esa capacidad (pregunta 14 de `architecture/09`).
 19b. `roles`: tabla `rol -> { capability }` con la capacidad que requiere cada rol (spec 11, requisito 18) y `task.max_attempts` (default 2). `harnesses.channel-gateway.command` define el comando que arranca el proceso supervisado y `approval.timeout_s` (default 600) el tiempo de espera de aprobaciones.
 19c. `voice.rtf_warn`, `voice.slow_policy`, `voice.keep_audio`, `voice.max_text_chars`, `voice.max_audio_s` y `voice.concurrency` (spec 13).
 
@@ -253,14 +253,14 @@ ConfigWatcher(paths: Sequence[Path], interval_s: float = 2.0, debounce_ms: int =
 ---
 
 ## Open Questions
-- [ ] Confirmar `config/agents/` y `config/catalog/` como ubicación definitiva (propuesta de esta spec).
+- [x] Confirmar `config/agents/` y `config/catalog/` como ubicación definitiva. Confirmado por el usuario.
 - [ ] `filesystem_roots` se agregó por la spec 08; validar que cada raíz exista y que no incluya `config/agents` de otros agentes salvo que el agente sea `Janus`.
 - [x] Variantes intermedias de `approval` (`ask_once_per_session`, `deny_always`):
       confirmadas por el usuario, las cuatro forman el conjunto completo. `agents/06`
       actualizado.
-- [ ] Nombre del paquete: se adopta `janus_config` (espacio plano `janus_*`), que además resuelve la duda de la spec 04.
+- [x] Nombre del paquete: se adopta `janus_config` y el prefijo `janus` en todos los paquetes de todos los lenguajes (`stack/02` sección 4). Confirmado por el usuario.
 - [ ] Puertos por defecto de `core.grpc_port` y `core.mcp_port`: los valores del ejemplo son placeholders.
-- [ ] Valor por defecto de `owner_reverify` cuando hay `owner_challenge_file`: el usuario dio ejemplos por ámbito (desde la PC nunca, desde WhatsApp una vez por chat nuevo, desde un speaker de la casa siempre) pero no un default global.
+- [x] Valor por defecto de `owner_reverify`: `per_session`. Elección del Architect, revisable. El usuario confirmó que la vigencia es configurable por canal (por tiempo, por sesión o por mensaje).
 
 ---
 

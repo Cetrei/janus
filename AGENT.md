@@ -5,8 +5,8 @@
 ## Qué es
 Sistema operativo personal de agentes (estrella pura: ningún spoke habla con otro, todo pasa por Janus). Uso personal, un solo host (PC o Raspberry Pi). Licencia MIT, copyright Joanfer.
 
-## Estado (2026-09-19)
-Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 specs de implementación escritas** en `docs/specs/`. Las decisiones propuestas por las specs quedaron confirmadas (2026-09-20), salvo dos: ubicación de agentes en `config/agents/` con catálogo en `config/catalog/` (spec 02) y espacio de nombres `janus_*` con Python 3.11 o superior (specs 02 y 04). Siguiente paso: resolver esas dos y armar el kanban desde las specs. No hay código todavía.
+## Estado (2026-09-20)
+Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 specs de implementación escritas** en `docs/specs/`. Todas las decisiones propuestas por las specs quedaron confirmadas (2026-09-20). Antes de implementar hay que resolver la colisión entre el namespace `janus` del código generado de protobuf y el paquete `janus` de PyPI (spec 01, Open Questions). Siguiente paso: armar el kanban desde las specs. No hay código todavía.
 
 ## Mapa
 * `TODO.md`: lista viva. Decisiones pendientes de confirmar (sección 2), estado de las specs (sección 3) y trabajo previo a implementar (sección 4).
@@ -22,6 +22,7 @@ Documentación completa. Arquitectura, stack y modelo de agentes cerrados. **15 
 * Contratos: ABC en Python, modelo semántico en protobuf con `buf`, código generado commiteado.
 * Persistencia: SQLite sin ORM (`aiosqlite`), migraciones `.sql`, `sqlite-vec` para memoria. Redis solo para lo efímero.
 * MVC evaluado y descartado: el proyecto es una arquitectura por capas con puertos.
+* Monorepo con un workspace por ecosistema (`uv`, Cargo, bun), cada uno con su lockfile en la raíz, y prefijo `janus` en todos los paquetes (`janus_*`, `janus-*`, `@janus/*`). Detalle en `docs/stack/02-monorepo.md` secciones 3 y 4.
 
 ## Preguntas abiertas que las specs no resuelven
 Ninguna. Las cuatro residuales de `architecture/09` (5 OpenClaude, 9 multi-usuario, 12
@@ -56,9 +57,12 @@ Se cerraron seis decisiones propuestas por las specs:
   opción (se eliminó el hook `on_task_completed` y `memory.auto_capture`).
 * **Identidad de remitente (specs 02, 11, 14)**: identificador por plataforma por defecto,
   más un secreto compartido opcional en un `.md` libre que el agente valida llamando a
-  `mark_sender_verified`. Se agregaron `owner_reverify` y `owner_challenge_file` a la
-  config por canal (spec 02). Falta diseñar el ciclo de esa tool y el default de
-  `owner_reverify`.
+  `mark_sender_verified`. El núcleo evalúa la vigencia antes de cada llamada a Janus
+  (`owner_reverify`: `never`, `per_message`, `per_session` o `ttl`, default `per_session`)
+  y, si la verificación falta o venció, inyecta en el prompt el estado, el `.md` y la
+  instrucción de comprobar la identidad (spec 11, requisito 26bis). Se agregaron
+  `owner_reverify`, `owner_reverify_ttl` y `owner_challenge_file` a la config por canal
+  (spec 02). El default `per_session` lo eligió el Architect y es revisable.
 * **Approval (specs 02, 09, `agents/06`)**: cuatro valores, `ask_everytime`,
   `ask_once_per_session`, `allow_always`, `deny_always`.
 * **Cascada por dependencia fallida y detección de GUI**: ya estaban resueltas en las
@@ -74,3 +78,21 @@ Se cerraron seis decisiones propuestas por las specs:
   re embebe y descarta la tabla anterior solo si todo salió bien.
 * **Corrección verificada**: `multilingual-e5-small` no está en la lista integrada de
   `fastembed` (requiere `add_custom_model`); `multilingual-e5-large` sí.
+
+## Tercera ronda de la sesión (2026-09-20): estructura del monorepo
+* **Workspaces (`stack/02` sección 3)**: un workspace por ecosistema, `uv` (Python),
+  Cargo (Rust) y bun (TypeScript), cada uno con su lockfile en la raíz. Puntos por
+  validar en fases 0: bun frente al fork de OpenClaw, que es un workspace `pnpm` propio
+  con Node 22 (spec 14, requisito 4bis), y `crates/gui-automation` como miembro de Cargo
+  y de uv a la vez (spec 12).
+* **Nombres (`stack/02` sección 4)**: prefijo `janus` en todo. Python `janus-<corto>` e
+  import `janus_<corto>`; Rust `janus-<corto>`; TypeScript `@janus/<corto>`, con
+  `private: true`. Las carpetas no llevan prefijo. Python mínimo 3.11.
+* **Hallazgo**: el paquete `janus` de PyPI (cola sync/async de aio-libs) colisiona con el
+  namespace `janus` del código generado de protobuf. Se decide antes de generar código
+  (spec 01, Open Questions).
+* **`uvicorn`**: el usuario lo mencionó como parte del stack; ninguna spec lo nombraba.
+  Queda como verificación de la spec 11 (servidor ASGI del transporte HTTP de MCP).
+* **Pendiente detectado, sin corregir**: la spec 01 (`task.proto`) y la spec 03 (columna
+  `tasks.on_dependency_failure`) todavía definen el enum estático `DependencyFailurePolicy`
+  que la pregunta 10 ya reemplazó por `DependencyFailureTriage` (spec 11).

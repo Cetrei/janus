@@ -311,6 +311,7 @@ Errores gRPC: `UNAUTHENTICATED` (token ausente o inválido), `PERMISSION_DENIED`
 
 ## Open Questions
 - [ ] Versiones exactas de los plugins de la BSR y de `protobuf`/`grpcio`: fijarlas al implementar, verificando compatibilidad de gencode con el runtime.
+- [ ] **Colisión de namespace con PyPI**: existe el paquete `janus` (cola mixta sync/async de aio-libs, mantenido y muy usado) que instala el módulo `janus`, el mismo nombre que el namespace package `janus` del código generado (`janus/v1`). Si alguna dependencia lo trae al mismo entorno, ambos se pisan. Verificar al implementar que ninguna dependencia del workspace lo instale, y decidir si se renombra el paquete proto (por ejemplo `janusproto.v1`) antes de generar código por primera vez, porque después de publicar `v1` cambiarlo es un cambio incompatible.
 - [ ] Confirmar `Connect` (`@connectrpc/connect-node`, transporte gRPC) o `@grpc/grpc-js` para TypeScript en la spec 14.
 - [ ] Confirmar que `RETRY_REASSIGN` se conserva como valor de `DependencyFailurePolicy` (pregunta 10 de `architecture/09`; ver spec 11).
 

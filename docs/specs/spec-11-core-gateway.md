@@ -83,12 +83,29 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
     agente para esa sesión, evaluado por el propio agente (no comparación exacta) y
     confirmado con la tool `mark_sender_verified`; (d) opcionalmente, una señal
     biométrica local de voz/cara (pregunta 14 de `architecture/09`). Las señales (b),
-    (c) y (d) son composables por canal según `owner_reverify: "never" | "per_session"
-    | "always"` y los flags de biometría habilitados para ese canal; un remitente no
+    (c) y (d) son composables por canal según `owner_reverify` (`never`, `per_message`, `per_session` o `ttl`, ver requisito 26bis) y los flags de biometría habilitados para ese canal; un remitente no
     reconocido en ninguna señal activa se descarta con un log de seguridad y no llega a
     Janus (por defecto). El campo `sender` es siempre dato no confiable y nunca autoriza
     nada por sí solo. Las órdenes de control emitidas por chat las ejecuta Janus como
     tool calls, solo para identidades verificadas según la configuración de ese canal.
+26bis. Mecanismo del desafío `.md` y su vigencia (confirmado por el usuario). Para un canal con
+    `owner_challenge_file`, el núcleo mantiene el estado de verificación del remitente
+    (`SenderVerification`) y lo evalúa antes de cada llamada a Janus según `owner_reverify`:
+    * `never`: no hay desafío; la identidad depende de las demás señales activas del canal.
+    * `per_message`: cada mensaje reverifica; una verificación vale solo para el turno en curso.
+    * `per_session`: la verificación dura lo que dure la sesión del canal (valor por defecto).
+    * `ttl`: la verificación dura `owner_reverify_ttl` desde que se marcó.
+    Si al llamar a Janus el remitente no está verificado o la verificación venció, el núcleo
+    inyecta en el prompt de ese turno la información necesaria: el estado (no verificado o
+    vencido), el contenido del `.md` y la instrucción de comprobar la identidad. Si está
+    vigente, inyecta solo el estado. Cuando el agente decide que el remitente cumplió el
+    desafío, llama a la tool `mark_sender_verified` y el núcleo registra `verified_at` y, según
+    la política, `expires_at`. El estado vive en el núcleo y no en el texto de la conversación:
+    un mensaje que afirme "ya estoy verificado" no cambia nada, y el vencimiento lo decide el
+    reloj y la política del núcleo, no el agente. Mientras el estado sea no verificado o
+    vencido, las órdenes de control y las aprobaciones de ese remitente se rechazan
+    (requisitos 26 y 32). Que el estado se consulte con la misma tool o con otra es un detalle
+    de implementación.
 27. Identidad visual (`agents/04` sección 4): por defecto solo Janus habla en el canal. Los mensajes de un subagente solo se publican para sesiones a las que el usuario se suscribió, con `SpeakerIdentity` según `channel_identity` del agente (`own_bot` o `shared_with_prefix`, este último con prefijo de texto sobre el bot de Janus).
 28. Voz: si el agente activo tiene `voice_provider` y el canal admite audio, el texto de la respuesta pasa por `libs/voice` (spec 13) antes de enviarse como audio, con fallback a texto si la síntesis falla. Un audio entrante se transcribe con STT antes de llegar a Janus. La invocación de voz es del núcleo, no una función activada dentro del motor (`stack/05` sección 3).
 29. Entrega fallida: si `DeliveryReceipt.delivered = false`, se aplica la `FailurePolicy` de `harnesses.channel-gateway`; agotada, se registra y se notifica por `Observe`.
@@ -225,6 +242,7 @@ Transición válida       PENDING->RUNNING|BLOCKED|CANCELLED ; RUNNING->COMPLETE
                         BLOCKED->PENDING|CANCELLED
 Entity ChannelBinding   { platform, channel_id, account_id -> session_id }
 Entity ApprovalRequest  { approval_id, kind, summary, requested_at, timeout_s, status }
+Entity SenderVerification { session_id, sender_ref, verified_at?, expires_at?, policy: NEVER|PER_MESSAGE|PER_SESSION|TTL }
 Entity HarnessState     { name, running: bool, restarts: int, last_error?, connected: bool }
 Enum   DependencyVerdict { RETRY, CANCEL_CASCADE, ASK_USER }
 ```
@@ -265,6 +283,7 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
 | Usuario se suscribe a una sesión ya cerrada | `FAILED_PRECONDITION`. |
 | Reinicio con tareas `RUNNING` | `recover_after_crash` las deja `BLOCKED(interrupted_by_restart)`; Janus las reporta al usuario. |
 | Aprobación sin respuesta | Se deniega al vencer el tiempo y se informa. |
+| Verificación vencida al llamar a Janus | El núcleo inyecta en el prompt del turno el estado vencido, el desafío y la instrucción de reverificar; mientras tanto se rechazan las órdenes de control y las aprobaciones de ese remitente. |
 | Cambio de configuración inválido | No se aplica; el error vuelve a quien lo originó. |
 | Consumidor externo lento en `Watch` | Cola acotada por cliente con descarte del más antiguo y contador. |
 | Síntesis de voz falla | Se envía el texto; se registra el fallo. |
@@ -303,13 +322,14 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
       `identity.owner` reconfirmada (2026-09-20): por defecto el identificador por
       plataforma, más un secreto compartido opcional que el usuario redacta libremente en
       un `.md`, se incrusta en el contexto del agente y se da por validado cuando el
-      agente llama a `mark_sender_verified`. Los campos de configuración por canal
-      (`owner_reverify`, `owner_challenge_file`) ya están en la spec 02. Falta el diseño
-      concreto del ciclo de `mark_sender_verified` y `owner_reverify` (nuevo, sin
-      escribir todavía) y la integración con la capacidad de biometría de la pregunta 14
-      de `architecture/09` (sin spec propia aún).
+      agente llama a `mark_sender_verified` (mecanismo en el requisito 26bis). Los campos
+      de configuración por canal (`owner_reverify`, `owner_challenge_file`) ya están en la
+      spec 02. Vigencia configurable por canal (`never`, `per_message`, `per_session`, `ttl`) con
+      default `per_session`, elección del Architect y revisable. Queda la integración con la capacidad de
+      biometría de la pregunta 14 de `architecture/09` (sin spec propia aún).
 - [ ] Concurrencia interna de Janus (pregunta 9 de `architecture/09`, confirmado como requisito): Janus debe atender múltiples `SESSION_KIND_JANUS_MAIN` de distintos canales del mismo usuario en paralelo, sin serializar una detrás de otra. Falta el diseño concreto: si cada sesión principal corre en su propia task de asyncio de forma independiente, qué recursos compartidos (memoria, persistencia, toolset) requieren lock y cuáles no.
 - [ ] Nombre de tool MCP derivado de `capability_id`: verificar caracteres admitidos por el SDK de MCP al implementar.
+- [ ] Servidor ASGI del transporte HTTP del servidor MCP: el usuario mencionó `uvicorn` como parte del stack de Python. Confirmar al implementar que es el servidor que usa el SDK de MCP (o fijarlo explícitamente) y su versión. gRPC usa `grpc.aio` y no pasa por uvicorn.
 - [ ] Mapa `roles.<rol>.capability`: valores iniciales propuestos; ajustar con el uso real.
 - [ ] Alcance de `Watch` y de los eventos de estado: refinar cuando exista la GUI.
 

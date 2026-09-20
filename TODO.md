@@ -8,7 +8,7 @@ resuelve.
 
 Orden de trabajo acordado: **documentar todo → specs por componente → kanban
 (GitHub Projects u otra app) → implementación.** Las dos primeras etapas están completas
-a la espera de confirmar las decisiones propuestas de la sección 2.
+y las decisiones propuestas de la sección 2 están confirmadas.
 
 ---
 
@@ -56,9 +56,9 @@ reestructurar `libs/capabilities/`.
   delta real se mide en la spec 08.
 
 ### 1.6 ~~Flecos menores de indexación y filesystem~~ — RESUELTOS EN LAS SPECS
-Propuestas en `docs/specs/`; confirmar (ver sección 2):
+Propuestas en `docs/specs/`; ubicación de agentes confirmada, el resto por confirmar (ver sección 2):
 - Ubicación de los folders de agente: `config/agents/<Nombre>/` y catálogo compartido en
-  `config/catalog/` (spec 02).
+  `config/catalog/` (spec 02). **Confirmada.**
 - Catálogo inicial de categorías de memoria: solo `profile`; el mecanismo es
   auto-extensible (spec 07).
 - Esquema de la tabla de solicitudes en cola: `agent_queue` (spec 03).
@@ -72,8 +72,15 @@ Las specs cerraron varios residuales de `docs/architecture/09-preguntas-abiertas
 con una propuesta concreta. Ninguna se considera cerrada hasta que el usuario la
 confirme (el detalle y la tabla completa están en `docs/specs/README.md`):
 
-- [ ] Ubicación de agentes en `config/agents/` y catálogo en `config/catalog/` (spec 02).
-- [ ] Espacio de nombres Python `janus_*` y versión mínima 3.11 (specs 02 y 04).
+- [x] Ubicación de agentes en `config/agents/` y catálogo en `config/catalog/` (spec 02).
+      Confirmado.
+- [x] Espacio de nombres: prefijo `janus` en todos los paquetes de todos los lenguajes
+      (`janus_*` en Python, `janus-*` en Rust, `@janus/*` en TypeScript) y Python 3.11 o
+      superior, que es la versión que trae `tomllib` en la stdlib (specs 02 y 04, detalle en
+      `stack/02` sección 4). Confirmado.
+- [x] Workspaces: uno por ecosistema, `uv` (Python), Cargo (Rust) y bun (TypeScript), cada
+      uno con su lockfile en la raíz (`stack/02` sección 3). Confirmado. Bun frente al fork
+      de OpenClaw queda como verificación de la fase 0 de la spec 14.
 - [x] Selección entre spokes (residual de la pregunta 1, spec 09): salud, luego
       política del usuario, luego rol solo para desempatar candidatos equivalentes.
       Ante un fallo, se maneja con una `FallbackChain` declarativa que el usuario
@@ -86,8 +93,11 @@ confirme (el detalle y la tabla completa están en `docs/specs/README.md`):
       usuario; no existe captura automática, ni como opción. Confirmado.
 - [x] Identidad de remitente en capas (residual de la pregunta 3, specs 11 y 14):
       identificador por plataforma por defecto, más un secreto compartido opcional en un
-      `.md` libre que el agente valida con una tool. Confirmado. Queda por diseñar el ciclo
-      de `mark_sender_verified` y `owner_reverify` (ver sección 4).
+      `.md` libre. El agente recibe por instrucción inyectada que debe comprobar si el
+      remitente está verificado, y lo marca con una tool. La vigencia es configurable por
+      canal (`never`, `per_message`, `per_session`, `ttl`; default `per_session`, elección
+      del Architect, revisable) y, cuando vence, el núcleo reinyecta la información en el
+      prompt al llamar a Janus. Confirmado.
 - [x] Cascada por dependencia fallida (pregunta 10, spec 11): no es un enum estático; la
       decide Janus en runtime con `DependencyFailureTriage` (`RETRY`, `CANCEL_CASCADE`,
       `ASK_USER`). Confirmado.
@@ -174,11 +184,12 @@ specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
       se incorpora a la 15, a decidir al planificar el kanban.
 - [ ] Incorporar a la spec 11 el diseño de concurrencia interna de Janus (múltiples
       `SESSION_KIND_JANUS_MAIN` en paralelo por canal, residual de la pregunta 9).
-- [ ] Diseñar en las specs 11 y 14 el ciclo de verificación por secreto compartido: cómo se
-      incrusta el `.md` en el contexto, la tool `mark_sender_verified`, la vigencia por
-      `owner_reverify` y el valor por defecto de ese campo (Open Question de la spec 02).
-- [ ] Medir en la PC del usuario `multilingual-e5-large` (CPU y CUDA) y recalibrar el
-      umbral de deduplicación de memoria y los objetivos de latencia (specs 07 y 10).
+- [ ] Diferido a la implementación: medir `multilingual-e5-large` (CPU y CUDA) en la PC
+      del usuario y recalibrar el umbral de deduplicación de memoria y los objetivos de
+      latencia (specs 07 y 10).
+- [ ] Resolver la colisión entre el namespace `janus` del código generado de protobuf y el
+      paquete `janus` de PyPI (spec 01, Open Questions). Hay que decidirlo antes de generar
+      código por primera vez.
 - [ ] Crear kanban (GitHub Projects u otra herramienta) a partir de las specs ya
       escritas: cada spec se descompone en tareas concretas, no al revés. Las fases 0
       (auditorías y spikes de las specs 8, 10, 12 y 14) son tareas explícitas.
@@ -202,8 +213,6 @@ specs 13 y 15, que cubren piezas que ninguna spec del plan original poseía.
 
 ## Próximo paso inmediato
 
-Las specs están completas y las decisiones de la sección 2 quedaron confirmadas, salvo
-dos que no entraron en esta ronda: la ubicación de agentes en `config/agents/` con
-catálogo en `config/catalog/` (spec 02) y el espacio de nombres `janus_*` con Python 3.11
-o superior (specs 02 y 04). Resueltas esas dos, el siguiente paso es armar el kanban
-desde las specs (sección 4).
+Las specs están completas y todas las decisiones de la sección 2 quedaron confirmadas.
+Antes de implementar hay que resolver la colisión de namespace con PyPI (sección 4). El
+siguiente paso es armar el kanban desde las specs.

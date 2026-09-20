@@ -121,6 +121,67 @@ docs/                       # Documentación: architecture/, stack/, agents/, sp
 
 ---
 
+## 3. Workspaces: uno por ecosistema, todos en la raíz
+
+Regla fijada por el usuario (2026-09-20): la estructura es de procesos independientes
+(sección 1), y por eso todo el código se organiza con el mecanismo de workspaces nativo
+de cada ecosistema, no con carpetas sueltas ni instalaciones por componente.
+
+| Ecosistema | Herramienta | Archivo raíz | Miembros | Lockfile |
+|---|---|---|---|---|
+| Python | `uv` | `pyproject.toml` con `[tool.uv.workspace]` | `libs/*`, `apps/core-gateway` y `crates/gui-automation` (que se construye con maturin; a validar en el spike de la spec 12) | `uv.lock` |
+| Rust | Cargo | `Cargo.toml` con `[workspace]` | `crates/*` | `Cargo.lock` |
+| TypeScript | `bun` | `package.json` con `workspaces` | `packages/*` y `apps/channel-gateway` | `bun.lock` |
+
+Reglas comunes:
+
+* Un solo lockfile por ecosistema y dependencias compartidas declaradas una vez
+  (`[workspace.dependencies]` en Cargo, `workspace = true` en `[tool.uv.sources]`,
+  `workspace:*` en bun).
+* Los workspaces no se mezclan entre sí. El puente entre lenguajes es `proto/` con `buf`
+  (`stack/04`), salvo el caso de `crates/gui-automation`, que Cargo compila y uv instala
+  como paquete Python.
+* Los archivos raíz no llevan código. Cada miembro sigue siendo desplegable o probable por
+  su cuenta.
+
+Puntos abiertos de esta sección, todos en la fase 0 de sus specs:
+
+* **Bun frente al fork de OpenClaw** (spec 14): OpenClaw es un workspace `pnpm` propio que
+  exige Node 22. Bun es la decisión del usuario para el resto, pero hay que verificar que
+  el fork instala, compila y arranca con bun, si el runtime del proceso sigue siendo Node
+  o pasa a ser Bun, y cómo convive su workspace interno con el workspace raíz.
+* **`crates/gui-automation` en dos workspaces** (spec 12): validar en el spike que un
+  mismo directorio sea miembro de Cargo y de uv sin fricción.
+
+---
+
+## 4. Nombres de paquetes: prefijo `janus` en todo
+
+Regla fijada por el usuario (2026-09-20): todos los paquetes, de cualquier lenguaje,
+llevan el prefijo `janus`. Las carpetas no lo llevan (`libs/config/`, no
+`libs/janus-config/`).
+
+| Ecosistema | Carpeta | Nombre de paquete | Nombre de import | Ejemplo |
+|---|---|---|---|---|
+| Python (`libs/`, `apps/`) | `libs/config` | `janus-<corto>` | `janus_<corto>` | `janus-config`, `janus_config` |
+| Rust (`crates/`) | `crates/filesystem-mcp` | `janus-<corto>` | `janus_<corto>` | `janus-filesystem-mcp` |
+| TypeScript (`packages/`, `apps/`) | `packages/proto-ts` | `@janus/<corto>` | `@janus/<corto>` | `@janus/proto` |
+
+Reglas:
+
+* `<corto>` lo fija cada spec en su estructura de directorios. No tiene por qué igualar
+  el nombre de la carpeta ni llevar sufijo de lenguaje: `libs/reasoning-engine` es
+  `janus_reasoning`, `apps/core-gateway` es `janus_core`, `libs/proto-py` y
+  `packages/proto-ts` son `janus_proto` y `@janus/proto`.
+* Crates con binding PyO3: el paquete de Cargo es `janus-gui-automation` y el módulo de
+  Python es `janus_gui`, tal como fija la spec 12.
+* Los paquetes de TypeScript son internos: llevan `private: true` y no se publican en npm.
+* Excepción dictada por la ruta de los `.proto`: el código generado vive en el namespace
+  `janus.v1` (spec 01), con fachada `janus_proto`. Ese namespace tiene un riesgo de
+  colisión con un paquete de PyPI, descrito en la spec 01 (Open Questions).
+
+---
+
 ## Documentos relacionados
 - `stack/01-contexto-y-lenguajes.md` — el contexto de despliegue que justifica un solo
   proceso para el núcleo.

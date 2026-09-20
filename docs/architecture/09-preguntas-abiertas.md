@@ -122,9 +122,12 @@ señales, todas configurables de forma independiente por canal:
 Las tres son composables por canal: un canal puede usar solo una, dos, las tres, o
 ninguna (degradando a confiar en el pairing del gateway). La vigencia de una
 verificación exitosa por desafío `.md` también es configurable por canal/ámbito
-(`owner_reverify: "never" | "per_session" | "always"`) — ejemplo dado por el usuario:
-desde la PC (interacción directa) nunca se pide, desde WhatsApp se pide una vez por
-chat nuevo, desde un speaker de la casa se pide siempre.
+(`owner_reverify`: `never`, `per_message`, `per_session` o `ttl` con una duración) —
+ejemplo dado por el usuario: desde la PC (interacción directa) nunca se pide (`never`),
+desde WhatsApp se pide una vez por chat nuevo (`per_session`), desde un speaker de la casa
+se pide siempre (`per_message`). Cuando se llama a Janus y el sistema detecta que la
+verificación venció, inyecta esa información en el prompt del turno (spec 11, requisito
+26bis).
 
 **Confirmado por el usuario (2026-09-20)** (`specs/spec-11-core-gateway.md` y
 `specs/spec-14-channel-gateway.md`): verificación en capas, con el emparejamiento y la
@@ -134,9 +137,9 @@ comparación mecánica), y opcionalmente un secreto compartido que el usuario de
 escribe libremente en un `.md` (señal 2). Ese secreto se incrusta en el contexto del
 agente hasta que este decide que la identidad quedó validada y lo marca llamando a una
 tool. Los campos de configuración por canal (`owner_reverify`, `owner_challenge_file`)
-ya están en `specs/spec-02-config.md`. Queda como trabajo de diseño para las specs 11 y
-14 el ciclo de la tool `mark_sender_verified` y la integración con la biometría de la
-pregunta 14.
+ya están en `specs/spec-02-config.md`, y el mecanismo de vigencia y de reinyección al
+prompt está en `specs/spec-11-core-gateway.md`, requisito 26bis. Queda como trabajo de
+diseño la integración con la biometría de la pregunta 14.
 
 ## 4. Gobernanza y licencia de Hermes — RESUELTA
 **Origen:** `08-mapa-de-componentes-reales.md`, sección 1.

@@ -1,8 +1,8 @@
 # Feature Spec: adaptadores concretos de spoke (libs/adapters/src/janus_adapters/spokes/)
 
 > **Status**: Ready for implementation, por adaptador (cada uno puede entregarse por separado)
-> **Last updated**: 2026-09-19
-> **Orden de implementación**: 15 de 15. Depende de: spec 04 (contratos), spec 10 (motor), spec 11 (núcleo), spec 12 (GUI) y spec 14 (channel-gateway).
+> **Last updated**: 2026-09-20
+> **Orden de implementación**: 15 de 18. Depende de: spec 04 (contratos), spec 10 (motor), spec 11 (núcleo), spec 12 (GUI), spec 14 (channel-gateway), spec 16 (`janus_platform`) y spec 17 (pools de instancias, absorción de Relay).
 
 ---
 
@@ -21,11 +21,12 @@ Adaptadores cubiertos:
 | `McpClientAdapter` | según mapeo | cliente MCP a un servidor MCP | este documento |
 | `GuiChatAdapterBase` y `ClaudeDesktopAdapter` | razonamiento, tipo 2.4 | vía `janus_gui` | 12 |
 | `ApiModelAdapter` | razonamiento | cliente HTTP compatible con OpenAI | este documento |
-| `GeminiDesktopAdapter` | razonamiento, tipo 2.4 | diferido (ver requisito 24) | 12 |
+| `GeminiDesktopAdapter` | razonamiento, tipo 2.4 | diferido (ver requisito 31) | 12 |
+| `VisionAgentAdapter` | razonamiento GUI, híbrido con `ClaudeDesktopAdapter` | vía `janus_gui` + modelo de visión liviano | este documento, 12, 18 |
 
 Una vez implementados, el sistema cubre su motivación de origen (`architecture/00` sección 3): un pool de capacidades de razonamiento con fallback por disponibilidad, sea por cuentas de una aplicación de escritorio o por modelos accesibles por API.
 
-No cubre a Relay: su futuro (pregunta 13 de `architecture/09`) sigue abierto.
+No cubre a Relay: la pregunta 13 de `architecture/09` decidió que se absorbe de forma generalizada y multiplataforma dentro del núcleo y `janus_platform`, no como un spoke propio (spec 17).
 
 ---
 
@@ -70,11 +71,15 @@ No cubre a Relay: su futuro (pregunta 13 de `architecture/09`) sigue abierto.
 ### `GuiChatAdapterBase` y `ClaudeDesktopAdapter`
 25. `GuiChatAdapterBase` (`GuiDrivenMixin` más `ReasoningAdapter`, `max_concurrency == 1`) implementa el flujo genérico de las aplicaciones de chat: adquirir `screen_lock`, localizar o abrir la ventana, enfocar y `verify_focus`, mapear elementos, `expect` de los anclajes de entrada, envío y salida, opcionalmente iniciar una conversación nueva, escribir el texto de la solicitud, activar el envío, `wait_until_stable` y leer la respuesta. Devuelve un terminal `SUCCEEDED` con el texto (más `PROGRESS` "generando" opcionales). Usa el protocolo `GuiSurface` de `janus_gui.surface` (spec 12) y toda llamada va en `asyncio.to_thread`.
 26. Config común (`GuiChatSettings`): `mapping_strategy` (`REALTIME` por defecto o `ASSISTED`), `window_query` (app id o título, más selección de instancia por título o pid), `launch_command` (opcional, para abrir una instancia o un perfil concreto), `conversation_mode` (`fresh`, que abre conversación nueva por solicitud para no mezclar contexto, o `continue`), `settle_ms`, `max_response_s`, `expectations` (anclajes de entrada, envío, salida e indicador), `quota_patterns` (expresiones que indican límite de mensajes) y `stream_partials` (false por defecto).
-27. `ClaudeDesktopAdapter` fija los valores por defecto de esa aplicación (identificador de ventana, anclajes iniciales, patrones de cuota) sobre la base. Cada perfil o cuenta es una instancia con su `spoke_id` (spec 04). Cómo se abren varias cuentas simultáneas (por ejemplo, un directorio de datos de usuario distinto por instancia) se valida en el spike de la spec 12; no se asume.
+27. `ClaudeDesktopAdapter` fija los valores por defecto de esa aplicación (identificador de ventana, anclajes iniciales, patrones de cuota) sobre la base. Cada perfil o cuenta es una instancia con su `spoke_id` (spec 04), típicamente declarada dentro de un `[[instance_pools]]` (spec 17) en vez de como `[[spokes]]` suelto, para que `PoolCoordinator` gestione su ciclo de vida de ventana. Cómo se abren varias cuentas simultáneas (`--user-data-dir` por perfil o modo secuencial con `max_alive = 1`) se valida en el spike de la spec 12 y queda resuelto operativamente por `InstanceLauncher` (spec 17, requisitos 9 y 10); esta clase no abre ni cierra ventanas por sí misma, eso es responsabilidad del `PoolHandle` que recibe en `AdapterContext.pool`.
 28. Detección de cuota: si el texto de salida o la interfaz coincide con `quota_patterns`, lanza `QuotaExhaustedError(retry_after)`, con `retry_after` calculado si el mensaje de la aplicación trae la ventana de espera y una estimación configurable si no. La base publica salud `UNAVAILABLE` y el Registro elige otro spoke (`architecture/08` sección 5).
 29. Un `InterfaceInvalidated` de `janus_gui` se propaga tal cual; con `ASSISTED` la base marca `requires_user_action = true` en la salud (spec 04, requisito 15).
 30. Si la solicitud contiene texto que no se pueda escribir con fidelidad (caracteres no soportados por el backend de input), lanza `TranslationError`; nunca escribe una versión truncada en silencio.
 31. `GeminiDesktopAdapter` queda **diferido**: Gemini Desktop está documentado para macOS y Windows (`architecture/08` sección 6) y la crate de GUI de la primera versión es Linux (spec 12). Se implementa como subclase de `GuiChatAdapterBase` cuando exista una plataforma soportada por la crate o una compilación oficial en Linux. Mientras tanto, la capacidad de Gemini se cubre con `ApiModelAdapter` sobre su API.
+
+### Adaptador de visión para GUI (híbrido, complementario al árbol de accesibilidad)
+31bis. Decisión del usuario (2026-09-20, debate sobre `GuiChatAdapterBase` "estilo Astra"): el enfoque de GUI es híbrido, no exclusivo. La spec 12 ya reserva el respaldo por visión como complemento del árbol de accesibilidad (`architecture/10`, requisito 12 de la spec 12: "solo si el spike demuestra que el árbol de accesibilidad no basta"). El usuario decidió invertir el orden de entrega, no el diseño: entre las dos estrategias posibles para operar una app de escritorio (sin modelo, vía `REALTIME`/AT-SPI; y con modelo, vía captura de pantalla más decisión de un modelo de visión liviano sobre dónde hacer clic), se implementa primero la que sea más rápida de dejar funcionando end to end, y la otra queda para una actualización posterior una vez que el sistema completo esté operativo. Cuál de las dos resulta más rápida de implementar no está decidido de antemano: se determina al medir el spike de la spec 12 (si el árbol de accesibilidad de Claude Desktop es legible sin fricción, `REALTIME` gana por ser más barato y ya estar especificado; si no lo es o requiere activar accesibilidad de forma poco confiable, el enfoque de visión se adelanta). El requisito de "todo local por defecto, configurable a nube" del usuario (mismo patrón que voz, spec 13, y biometría, spec 18) aplica igual al modelo de visión: liviano, corre en CPU, sin LLM completo.
+32bis-vision. `VisionAgentAdapter` (nombre de paquete `janus_adapters.spokes.vision_agent`), capacidad `vision.ui.locate` y `vision.ui.step` (ids reservados en spec 01, requisito 14): recibe un objetivo en lenguaje natural y opcionalmente el historial de pasos previos; captura la ventana enfocada vía `janus_gui.probe`/`CaptureBackend` (spec 12), la envía como `Payload.attachments` (spec 01, requisito recién agregado) a un modelo de visión liviano configurable (proveedor local por defecto, proveedor de nube opt-in explícito, mismo mecanismo `allow_remote`/`remote_ack` que la spec 18) y devuelve la acción propuesta (clic en coordenadas, texto a escribir, tecla a pulsar) para que la base de `GuiChatAdapterBase` la ejecute vía `activate`/`type_text`/`press_key`. Nunca ejecuta la acción por sí mismo: la decisión de mutar pantalla sigue pasando por `request_approval` (spec 04, requisito 23; spec 11, requisito 32bis) igual que cualquier otra acción de mutación de `janus_gui` (spec 12, requisito 22bis). Config (`VisionAgentSettings`): `provider` (referencia a un modelo de visión, mismo esquema de proveedor intercambiable que biometría y voz), `max_steps` (default 30, mismo límite que `gui_automation.agent.max_steps`), `confirm_before_action` (default según la política de aprobación del tipo de acción). Detalle técnico completo (modelos concretos, umbrales, formato del prompt de localización) diferido: no se fija de memoria y se verifica al implementar, siguiendo el mismo criterio que la spec 18 con los modelos de biometría.
 
 ### `ApiModelAdapter`
 32. Clase `ReasoningAdapter` para modelos accesibles por API compatible con OpenAI (incluye proveedores con cuota gratuita y endpoints locales como Ollama). Capacidad `reasoning.complete`. Es la forma en que el pool de modelos con fallback de la motivación de origen se registra como capacidades (`architecture/04` sección 5).
@@ -158,6 +163,7 @@ libs/adapters/src/janus_adapters/spokes/
   mcp_client/        adapter.py config.py translate.py
   gui_chat/          base.py config.py flow.py quota.py
   claude_desktop/    adapter.py config.py defaults.py
+  vision_agent/      adapter.py config.py providers.py
   api_model/         adapter.py config.py translate.py
   (gemini_desktop/   diferido)
 libs/adapters/tests/spokes/  # un test por adaptador que hereda AdapterContractSuite
@@ -272,10 +278,12 @@ Mapeo de errores (resumen):
 
 ## Open Questions
 - [ ] Esquema `.proto` real del servidor de OpenClaude: se obtiene en la fase 0 (requisito 15); puede cambiar el contrato de `run_task`.
-- [ ] Cómo se abren varias cuentas de Claude Desktop a la vez en Linux (una instancia por directorio de datos de usuario u otro método): validar en el spike de la spec 12.
-- [ ] Futuro de Relay (pregunta 13 de `architecture/09`): fuera de esta spec; si se decide tratarlo como spoke, se agrega un adaptador propio.
+- [x] Cómo se abren varias cuentas de Claude Desktop a la vez en Linux: resuelto operativamente en `InstanceLauncher` (spec 17, requisitos 9 y 10), con `--user-data-dir` por perfil o modo secuencial `max_alive = 1` como respaldo. El resultado numérico exacto (cuál modo usar por defecto) sigue pendiente del spike de la spec 12.
+- [x] Futuro de Relay (pregunta 13 de `architecture/09`, RESUELTA): se absorbe de forma generalizada y multiplataforma en el núcleo y `janus_platform`, no como spoke propio (spec 17).
 - [ ] `GeminiDesktopAdapter`: diferido hasta que haya plataforma soportada (requisito 31).
-- [ ] Orden de entrega recomendado: `ReasoningEngineAdapter`, `ChannelBridgeAdapter`, `ApiModelAdapter` (habilita el pool con fallback), `GrpcSpokeAdapter`, `McpClientAdapter`, `OpenClaudeAdapter` y, al final, `ClaudeDesktopAdapter`.
+- [ ] Modelo de visión concreto para `VisionAgentAdapter` (requisito 32bis-vision): sin candidato verificado en esta sesión; se elige y se mide al implementar, con el mismo criterio de compuerta de rendimiento que la spec 18.
+- [ ] Cuál de las dos estrategias de GUI (`REALTIME` vía accesibilidad o `VisionAgentAdapter`) se implementa primero: decidido por el resultado del spike de la spec 12, no de antemano (requisito 31bis).
+- [ ] Orden de entrega recomendado: `ReasoningEngineAdapter`, `ChannelBridgeAdapter`, `ApiModelAdapter` (habilita el pool con fallback), `GrpcSpokeAdapter`, `McpClientAdapter`, `OpenClaudeAdapter` y, al final, la estrategia de GUI que gane el spike (`ClaudeDesktopAdapter` sobre `REALTIME`, o `VisionAgentAdapter`), con la otra diferida a una actualización posterior.
 
 ---
 

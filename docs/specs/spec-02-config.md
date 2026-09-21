@@ -14,7 +14,7 @@ Construir la librería que carga, valida y expone la configuración de Janus sin
 2. La configuración por agente (`agent.toml`) con la marca `requires_restart` por campo (`agents/03` sección 4).
 3. La topología obligatoria de carpetas de agente y su validación como barrera antes de aplicar cambios (`agents/03` secciones 2.1 y 3).
 
-Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de agente.
+Resuelve la ubicación exacta de los folders de agente que `agents/03` y `agents/08` dejaron diferida.
 
 ---
 
@@ -28,13 +28,13 @@ Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de 
 
 ### Secciones del esquema raíz (`JanusSettings`)
 5. `core`: `bind_host` (default `127.0.0.1`), `grpc_port`, `mcp_port`. Escuchar fuera de loopback exige `allow_non_loopback = true` explícito.
-6. `paths`: `state_dir` (default `~/.local/state/janus`), `db_file` (default `janus.db`), `log_dir`. Se expanden `~` y variables.
+6. `paths`: `state_dir` (default por plataforma con `janus_platform.default_state_dir()`: `~/.local/state/janus` en Linux y `%LOCALAPPDATA%\Janus\state` en Windows), `db_file` (default `janus.db`), `log_dir`. Se expanden `~` y variables.
 7. `redis`: `enabled`, `url`. Redis es opcional; con `enabled = false` el sistema degrada (spec 06).
 8. `harnesses.reasoning-engine` y `harnesses.channel-gateway`: `port`, `timeout_ms`, `retry_policy`, `max_retries`, `backoff_base_ms`, `circuit_breaker_threshold`, `circuit_breaker_cooldown_s` (`stack/07` sección 1.1 y `stack/09`).
 9. `harnesses.owners`: tabla `capability_id -> harness`. Validación: un único dueño por capacidad de harness base (`stack/07` sección 1.3).
 10. `spokes`: lista de spokes externos estáticos con `spoke_id` (slug `^[a-z0-9][a-z0-9-]{0,62}$`, único), `adapter` (`paquete.modulo:Clase`), `enabled`, `settings` (tabla libre validada luego por `cls.config_model`) y override de política de fallo. Cada entrada se convierte en un `AdapterSpec` (spec 04).
 11. `providers`: tabla `nombre -> ProviderConfig` con `kind` (`openai_compatible`, `anthropic`, `ollama`, `openrouter`), `base_url`, `api_key` (`SecretRef`), `models`. Es la base del routing multi proveedor de `libs/reasoning-engine` (spec 10).
-12. `selection`: política por patrón de capacidad (glob) con `policy` (`priority`, `pinned`) y `spokes` ordenados, más `on_preferred_unavailable` (`fallback` por defecto, `block`, `ask`), `role_hints` (tabla `rol -> lista de tipos de spoke preferidos`, por ejemplo `implementer = ["execution"]`), `max_route_depth` (default 4), `heartbeat_ttl_s` (default 30) y `specialties` (tabla `categoría -> tipo de agente`). Ver spec 09.
+12. `selection`: política por patrón de capacidad (glob) con `policy` (`priority`, `pinned`) y `spokes` ordenados, más `fallback` (cadenas declarativas de N pasos, ver más abajo), `role_hints` (tabla `rol -> lista de tipos de spoke preferidos`, por ejemplo `implementer = ["execution"]`), `max_route_depth` (default 4), `heartbeat_ttl_s` (default 30) y `specialties` (tabla `categoría -> tipo de agente`). Ver spec 09. `fallback` es un arreglo de tablas `[[selection.fallback]]`: cada entrada lleva `capability` (glob) o `agent` (nombre) y `steps`, una lista ordenada de pasos heterogéneos, cada uno `{ spoke = "<spoke_id>" }`, `{ spoke = "pool:<pool_id>" }`, `{ provider = "<clave de providers>" }` o `{ wait = "<duración>" }`. Ejemplo: `steps = [{ spoke = "gemini-api" }, { spoke = "pool:claude-desktop" }, { provider = "openrouter" }, { wait = "5m" }]`. Un `wait` detiene la cadena esa duración y, si nada cambió, la agota (`FallbackChainExhausted`, spec 09). Un `spoke` inexistente al cargar genera una advertencia y no un error, porque los spokes dinámicos pueden registrarse después. El alias `pool:<pool_id>` se expande a los miembros del pool en el orden de sus perfiles (spec 17). Las cadenas de proveedor de modelo de un agente siguen en `fallback_providers` de su `agent.toml` con la misma estructura de pasos `provider`.
 13. `failure`: valores por defecto de la política de fallo, con override por harness o spoke.
 14. `agents`: `root` (default `config/agents`), `catalog_root` (default `config/catalog`), y `types.<tipo>.max_concurrent` (`agents/07`). El tipo `janus` no admite `max_concurrent` (exento).
 15. `approval`: política de aprobación de cambio de proveedor con cuatro valores
@@ -44,9 +44,15 @@ Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de 
 17. `voice`: proveedores por defecto de TTS y STT (spec 13).
 18. `observability`: `log_level`, `ring_buffer_size` (default 5000), rotación y canales Redis (spec 06).
 19. `identity.owner`: lista de identidades de canal autorizadas para comandos de control, cada una `{ platform, account_id, user_id }` (spec 11 y spec 14). Es la señal base de la verificación en capas: el identificador por plataforma, con comparación mecánica.
-19a. `channels`: tabla `plataforma -> lista de cuentas` con `account_id`, `role` (`main` o `agent_bot`), `credentials` (`SecretRef`), `allowlist` y límites (`max_attachment_bytes`, tamaño de colas). El núcleo resuelve los secretos y genera el archivo de runtime del `channel-gateway` (spec 14). Por cuenta, además, `owner_reverify` (`never`, `per_message`, `per_session` o `ttl`; default `per_session`) y `owner_challenge_file` (ruta opcional a un `.md` libre con el secreto compartido que el usuario decide, incrustado en el contexto del agente hasta que este lo da por validado con la tool `mark_sender_verified`, spec 11 requisito 26bis). `owner_reverify_ttl` (duración, por ejemplo `"30m"`) es obligatorio con `ttl` e inválido con cualquier otro valor. `owner_reverify` distinto de `never` exige `owner_challenge_file`; validación cruzada en la carga. Cuando la verificación vence, el núcleo lo detecta al llamar a Janus y reinyecta la información en el prompt (spec 11, requisito 26bis). Los flags de biometría por canal se agregan cuando exista la spec de esa capacidad (pregunta 14 de `architecture/09`).
+19a. `channels`: tabla `plataforma -> lista de cuentas` con `account_id`, `role` (`main` o `agent_bot`), `credentials` (`SecretRef`), `allowlist` y límites (`max_attachment_bytes`, tamaño de colas). El núcleo resuelve los secretos y genera el archivo de runtime del `channel-gateway` (spec 14). Por cuenta, además, `owner_reverify` (`never`, `per_message`, `per_session` o `ttl`; default `per_session`) y `owner_challenge_file` (ruta opcional a un `.md` libre con el secreto compartido que el usuario decide, incrustado en el contexto del agente hasta que este lo da por validado con la tool `mark_sender_verified`, spec 11 requisito 26bis). `owner_reverify_ttl` (duración, por ejemplo `"30m"`) es obligatorio con `ttl` e inválido con cualquier otro valor. `owner_reverify` distinto de `never` exige `owner_challenge_file` o al menos una señal biométrica en `identity.signals` del canal; validación cruzada en la carga. Cuando la verificación vence, el núcleo lo detecta al llamar a Janus y reinyecta la información en el prompt (spec 11, requisito 26bis). La configuración de biometría por canal está en 19e.
 19b. `roles`: tabla `rol -> { capability }` con la capacidad que requiere cada rol (spec 11, requisito 18) y `task.max_attempts` (default 2). `harnesses.channel-gateway.command` define el comando que arranca el proceso supervisado y `approval.timeout_s` (default 600) el tiempo de espera de aprobaciones.
 19c. `voice.rtf_warn`, `voice.slow_policy`, `voice.keep_audio`, `voice.max_text_chars`, `voice.max_audio_s` y `voice.concurrency` (spec 13).
+19d. `gui_automation`: `detector` (`accessibility`, `vision` o `auto`, default `auto`; spec 15), `approval.<acción>` con los cuatro valores de aprobación para `type_text`, `press_key`, `click`, `activate`, `open_app`, `close_window` y `move_window` (spec 12, requisito 22bis; los defaults están en la spec 15), `allowed_apps` (ids de aplicación que `GuiAgentAdapter` puede operar; vacía significa ninguna) y `agent.max_steps` (default 30), `agent.max_duration_s` (default 300), `agent.blocked_chords` (default `["ctrl+alt+delete", "alt+f4", "ctrl+shift+q", "super+l"]`) y `agent.allow_password_fields` (default `false`).
+19e. `biometrics` (spec 18): `enabled` (default `false`), `face` y `voice` con `provider`, `thresholds` y, para cara, `liveness` (`required` por defecto); `key` (`SecretRef`) o `key_source`; `sensors` (lista de `{ id, kind, device }`); `max_failed_attempts`, `lockout_window_s`, `lockout_s`, `allow_remote`, `remote_ack`, `model_idle_unload_s` y `latency_warn_ms`. Por canal, `identity = { signals, mode, control_mode, on_low_confidence, sensor }`: `signals` es un subconjunto de `platform_id`, `challenge`, `voice` y `face`; `mode` es `any` (basta una señal activa) o `all` (todas); `control_mode` rige las órdenes de control y las aprobaciones (default `all` si hay más de una señal activa y `mode` si hay una); `on_low_confidence` es `challenge` (default) o `deny`. Validación cruzada: `voice` o `face` en `signals` exige `biometrics.enabled = true`; `challenge` en `signals` o `on_low_confidence = "challenge"` exige `owner_challenge_file`; `sensor` debe existir en `biometrics.sensors`; `allow_remote = true` sin `remote_ack = true` es error.
+19f. `instance_pools` (spec 17): arreglo de tablas con `pool_id`, `adapter`, `settings`, `max_alive`, `idle_close_s`, `autostart` y `profiles` (cada perfil con `profile_id`, `label`, `user_data_dir`, `launch_args`, `preferred_roles`, `adopt`, `allow_close_adopted` y `settings`).
+19g. `usage` (spec 17): `warn_fraction` (default 0.85), `block_fraction` (default 0.98) y `probe_interval_s` (default 900), con override por spoke en `spokes[].usage`.
+19h. `retention` (spec 03, requisito 26): `closed_sessions_days` y `terminal_tasks_days`, ambos con default `0` (sin purga automática).
+19i. `judgment` (spec 11, requisito 20bis): `timeout_s` (default 15), `failure_triage_mode` (`janus` por defecto o `chain_only`), `failure_triage_skip_kinds` (default vacío; por ejemplo `["quota"]` para ahorrar tokens), `failure_triage_default` (`continue_chain`) y `dependency_triage_default` (`ask_user`), que son el veredicto si el tiempo vence.
 
 ### Recarga
 20. `ConfigWatcher(paths, interval_s=2.0, debounce_ms=300)` detecta cambios por mtime y hash de contenido, con reintento si el archivo está a medio escribir. Emite `ConfigChanged(path)`. No aplica nada por sí mismo.
@@ -88,7 +94,7 @@ Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de 
 * **Performance**: `load_settings` menor a 150 ms y `validate_agent_folder` menor a 50 ms p95 por agente típico en hardware clase Raspberry Pi 4. Objetivos propuestos, se ajustan tras medir.
 * **Security**: sin secretos en texto plano por defecto; valores enmascarados en errores y logs; validación de escape de rutas; sin `eval` ni ejecución de contenido de configuración.
 * **Reliability**: una edición inválida jamás derriba un agente en ejecución (el cambio no se aplica). El watcher tolera escrituras parciales con debounce y relectura.
-* **Portability**: Python 3.11 o superior. Dependencias permitidas: `pydantic>=2` y stdlib. Prohibido importar `libs/adapters`, `libs/persistence`, `libs/capabilities`, `libs/proto-py` y `apps/*`. Los valores como `on_dependency_failure` se manejan como cadenas y los mapea el consumidor.
+* **Portability**: Python 3.11 o superior. Dependencias permitidas: `pydantic>=2`, stdlib y `janus_platform`. Prohibido importar `libs/adapters`, `libs/persistence`, `libs/capabilities`, `libs/proto-py` y `apps/*`. Los valores como `on_dependency_failure` se manejan como cadenas y los mapea el consumidor.
 
 ---
 
@@ -96,7 +102,7 @@ Resuelve el punto 1.6 de `TODO.md` sobre la ubicación exacta de los folders de 
 
 ### Ubicación de los agentes: `config/agents/<Nombre>/`
 * **Chosen**: colección de carpetas bajo `config/agents/`, y catálogo compartido en `config/catalog/`.
-* **Reason**: `config/` ya es el territorio editable por el usuario y por IA (`config/janus.toml`); reúne lo declarado por el usuario y mantiene `docs/` como documentación. Resuelve el punto 1.6 de `TODO.md`.
+* **Reason**: `config/` ya es el territorio editable por el usuario y por IA (`config/janus.toml`); reúne lo declarado por el usuario y mantiene `docs/` como documentación.
 * **Rejected alternatives**: `agents/` en la raíz (compite con la carpeta de roles de desarrollo y mezcla config con código); `apps/core-gateway/agents/` (acopla config a un proceso).
 
 ### Catálogo compartido más `Skills/` por agente
@@ -165,7 +171,7 @@ config/
 
 ```
 Entity JanusSettings { core, paths, redis, harnesses, spokes[], providers{}, selection, failure,
-                       agents, approval, memory, voice, observability, identity }
+                       agents, approval, memory, voice, observability, identity, gui_automation, biometrics, instance_pools[], usage, retention, judgment }
 Entity SpokeConfig   { spoke_id: slug, adapter: "pkg.mod:Class", enabled: bool, settings: dict,
                        failure_policy?: FailureOverride }
 Entity ProviderConfig{ kind: enum, base_url: url, api_key: SecretRef, models: list[str] }
@@ -180,11 +186,11 @@ Ejemplo mínimo de `config/janus.toml`:
 ```toml
 [core]
 bind_host = "127.0.0.1"
-grpc_port = 8080
-mcp_port = 8081
+grpc_port = 47080
+mcp_port = 47081
 
 [harnesses.channel-gateway]
-port = 8090
+port = 47090
 retry_policy = "exponential-backoff"
 max_retries = 5
 
@@ -254,12 +260,12 @@ ConfigWatcher(paths: Sequence[Path], interval_s: float = 2.0, debounce_ms: int =
 
 ## Open Questions
 - [x] Confirmar `config/agents/` y `config/catalog/` como ubicación definitiva. Confirmado por el usuario.
-- [ ] `filesystem_roots` se agregó por la spec 08; validar que cada raíz exista y que no incluya `config/agents` de otros agentes salvo que el agente sea `Janus`.
+- [x] `filesystem_roots`: la validación (cada raíz existe y ninguna incluye `config/agents` de otros agentes salvo que el agente sea `Janus`) es un requisito de la carga, no una pregunta abierta. Usa `janus_platform.path_is_within`.
 - [x] Variantes intermedias de `approval` (`ask_once_per_session`, `deny_always`):
       confirmadas por el usuario, las cuatro forman el conjunto completo. `agents/06`
       actualizado.
 - [x] Nombre del paquete: se adopta `janus_config` y el prefijo `janus` en todos los paquetes de todos los lenguajes (`stack/02` sección 4). Confirmado por el usuario.
-- [ ] Puertos por defecto de `core.grpc_port` y `core.mcp_port`: los valores del ejemplo son placeholders.
+- [x] Puertos por defecto: `core.grpc_port = 47080`, `core.mcp_port = 47081` y `harnesses.channel-gateway.port = 47090`. El rango 47080 a 47099 queda reservado para Janus y evita 8000 y 8080, que otros servicios locales usan con frecuencia.
 - [x] Valor por defecto de `owner_reverify`: `per_session`. Elección del Architect, revisable. El usuario confirmó que la vigencia es configurable por canal (por tiempo, por sesión o por mensaje).
 
 ---

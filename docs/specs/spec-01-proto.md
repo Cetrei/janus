@@ -37,7 +37,7 @@ Alcance: mensajes, enums, servicios y tooling de generación. No incluye lógica
 11. El código generado queda bajo `libs/proto-py/src/janus_proto/v1/`, dentro del mismo paquete `janus_proto` que la fachada, porque los imports generados son absolutos y siguen la ruta del `.proto` (`from janus_proto.v1 import ...`). Solo `v1/` es generado; `__init__.py`, `helpers.py` y `capability_ids.py` se escriben a mano y `buf generate` no debe borrarlos (la salida no usa `clean: true`). No existe ningún paquete de nivel superior llamado `janus`: ese nombre lo ocupa otra librería de PyPI y un namespace propio colisionaría con ella (ver Technical Decisions).
 12. `janus_proto` re-exporta los tipos más usados (`SemanticRequest`, `SemanticEvent`, `SemanticResponse`, `CapabilityDescriptor`, `InboundEvent`, enums) y añade `janus_proto.helpers` y `janus_proto.capability_ids`.
 13. `janus_proto.helpers` provee: `progress_event`, `partial_event`, `terminal_event(request, response)` (copian `request_id`, `session_id`, `task_id`, `role` del request), `is_terminal(event)` y `new_request_id()` (UUID v4 hex).
-14. `janus_proto.capability_ids` define constantes de los namespaces reservados: `reasoning.complete`, `execution.run_task`, `channel.deliver`, `gui.window.control`, `gui.elements.map`, `voice.tts.synthesize`, `voice.stt.transcribe`, `memory.recall`. Los namespaces de primer nivel `reasoning`, `execution`, `channel`, `gui`, `voice`, `memory`, `janus` están reservados al núcleo. Un tercero usa cualquier otro namespace, siempre abstracto: un id de capacidad nunca incluye el nombre de un spoke (Principio #1).
+14. `janus_proto.capability_ids` define constantes de los namespaces reservados: `reasoning.complete`, `execution.run_task`, `channel.deliver`, `gui.window.control`, `gui.elements.map`, `gui.task.run`, `vision.ui.locate`, `vision.ui.step`, `voice.tts.synthesize`, `voice.stt.transcribe`, `memory.recall`. Los namespaces de primer nivel `reasoning`, `execution`, `channel`, `gui`, `vision`, `voice`, `memory`, `janus` están reservados al núcleo. Un tercero usa cualquier otro namespace, siempre abstracto: un id de capacidad nunca incluye el nombre de un spoke (Principio #1).
 
 ### Modelo de datos
 15. Los mensajes de la sección "Data Models" existen con esos campos y números.
@@ -150,6 +150,7 @@ message SemanticRequest {
   optional string task_id = 4; optional string role = 5; Payload input = 6;
   map<string,string> metadata = 7; google.protobuf.Duration deadline = 8;
   repeated string route_trace = 9;         // spoke_ids ya visitados; lo escribe solo el núcleo
+  repeated Payload attachments = 11;       // binarios adjuntos, por ejemplo capturas de pantalla (spec 15, visión)
   string requester_id = 10;                // spoke_id, "user" o "core"; lo escribe solo el núcleo
 }
 message SemanticResponse {
@@ -266,6 +267,7 @@ service Control {                            // Auth: scope control:write
   rpc CreateSession(CreateSessionRequest) returns (Session);
   rpc SubscribeSession(SubscribeRequest) returns (Session);    rpc UnsubscribeSession(SubscribeRequest) returns (Session);
   rpc SetPreference(SetPreferenceRequest) returns (google.protobuf.Empty);
+  rpc SetSpokeAvailability(SetSpokeAvailabilityRequest) returns (google.protobuf.Empty);   // spec 17
   rpc RegisterSpoke(SpokeRegistration) returns (RegisterAck);  rpc RetireSpoke(UnregisterRequest) returns (google.protobuf.Empty);
 }
 service Observe {                            // Auth: scope observe:read
@@ -276,7 +278,7 @@ service Observe {                            // Auth: scope observe:read
 }
 ```
 
-Reglas para los mensajes auxiliares no listados (`RegisterAck`, `TaskRef`, `ListRequest`, `StateEvent`, etc.): un mensaje por RPC con sufijo `Request` y `Response` salvo los reutilizados arriba; `ListRequest` lleva `page_size` y `page_token`; `StateEvent` lleva `oneof` de `Task`, `Session`, `SpokeRegistration`, `HealthReport` y `CapabilityChange`. El implementador los completa siguiendo estas reglas y las reglas de lint.
+Reglas para los mensajes auxiliares no listados (`RegisterAck`, `TaskRef`, `ListRequest`, `StateEvent`, etc.): un mensaje por RPC con sufijo `Request` y `Response` salvo los reutilizados arriba; `ListRequest` lleva `page_size` y `page_token`; `StateEvent` lleva `oneof` de `Task`, `Session`, `SpokeRegistration`, `HealthReport` y `CapabilityChange`. `SetSpokeAvailabilityRequest` lleva `spoke_id`, `mode` (`AVAILABILITY_MODE_AUTO`, `AVAILABILITY_MODE_UNAVAILABLE_UNTIL`, `AVAILABILITY_MODE_UNAVAILABLE_INDEFINITE`), `until` opcional y `reason` (spec 17). `SemanticRequest.attachments` no altera el contrato de los adaptadores existentes: un adaptador que no las use las ignora. El implementador los completa siguiendo estas reglas y las reglas de lint.
 
 Errores gRPC: `UNAUTHENTICATED` (token ausente o inválido), `PERMISSION_DENIED` (scope insuficiente), `NOT_FOUND`, `FAILED_PRECONDITION` (estado inválido), `RESOURCE_EXHAUSTED` (cola o cuota), `UNAVAILABLE` (proveedor no disponible), `INVALID_ARGUMENT`.
 

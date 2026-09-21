@@ -10,7 +10,7 @@
 
 Construir la capa de persistencia transversal (`architecture/06`, `stack/03`): acceso SQLite asíncrono con SQL explícito, un runner de migraciones propio y el esquema completo que necesitan sesiones, tareas, registro de capacidades, preferencias, cola de concurrencia, tokens y memoria.
 
-Una vez implementada, `core-gateway` (único proceso escritor) persiste todo el estado de verdad del sistema, y ese estado sobrevive reinicios y cambios de spoke. Resuelve los puntos 1.6 de `TODO.md` sobre el esquema de la cola y de las sesiones multi participante.
+Una vez implementada, `core-gateway` (único proceso escritor) persiste todo el estado de verdad del sistema, y ese estado sobrevive reinicios y cambios de spoke. Resuelve el esquema de la cola y de las sesiones multi participante que `agents/07` y `agents/04` dejaron diferido.
 
 ---
 

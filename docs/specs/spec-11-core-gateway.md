@@ -2,7 +2,7 @@
 
 > **Status**: Ready for implementation
 > **Last updated**: 2026-09-20
-> **Orden de implementación**: 11 de 15. Depende de: specs 01 a 07, 09 y 10. Los adaptadores concretos (spec 15) y `channel-gateway` (spec 14) se conectan a este proceso.
+> **Orden de implementación**: 11 de 18. Depende de: specs 01 a 07, 09, 10, 16 y 17. Los adaptadores concretos (spec 15) y `channel-gateway` (spec 14) se conectan a este proceso.
 
 ---
 
@@ -16,6 +16,8 @@ Responsabilidades propias de esta app, además de cablear las librerías:
 * Orquestación de tareas con dependencias, roles y reasignación.
 * Flujo de canales (mensaje entrante, Janus, voz, mensaje saliente) con verificación de identidad.
 * Implementación de los puertos del motor (`OrchestrationPort`, `ProviderHealthSink`, `ApprovalGateway`).
+* Implementación de `CoreGateway.request_approval` y `.get_state`/`.put_state` para adaptadores (spec 04, requisito 23).
+* Coordinación de pools de instancias y disponibilidad manual de spokes, absorbiendo la función de Relay (spec 17).
 * Supervisión de `channel-gateway`.
 * Aplicación de recarga de configuración.
 
@@ -43,6 +45,7 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
 10. Spokes externos dinámicos: `SpokeGateway.Register` con un token de scope `registry:register` crea una instancia del adaptador genérico correspondiente (`grpc` o `mcp`, spec 15) con `source = dynamic`, persiste el registro y lo mantiene mientras haya latidos (`Heartbeat`). Sin latido en `heartbeat_ttl_s` pasa a `UNAVAILABLE`; el registro persiste para reconexión.
 11. Salud activa: cada `health_interval_s` (default 30) se llama `health()` de cada adaptador y se actualiza el registro.
 12. El `Invoker` que se entrega al `Router` resuelve `spoke_id` a un adaptador local o dinámico y devuelve el stream de `invoke`. Un decorador `SlotAwareInvoker` adquiere el slot del carril cuando el destino es el motor de razonamiento y la solicitud lleva un `role` que mapea a un tipo de agente, y lo libera al terminar (Janus exento, spec 09).
+12bis. `PoolCoordinator` (spec 17) expande `instance_pools` de la config en `AdapterSpec` por perfil antes del arranque de `AdapterManager` (requisito 8), implementa `PoolHandle` para cada `ClaudeDesktopAdapter` u otro `GuiChatAdapterBase` instanciado como miembro de un pool, y aplica la política de apertura y cierre de ventanas (apertura perezosa, LRU al superar `max_alive`, cierre por inactividad). `Control.SetSpokeAvailability` persiste la anulación manual en `preferences` con la clave `spoke.availability.<spoke_id>`; el `Router` (spec 09) la aplica como capa `manual_override` por encima de la salud que informa el adaptador. Con esto se completa la absorción de la función de `claude-toolkit`/Relay (residual de la pregunta 13 de `architecture/09`), sin conservar su código.
 
 ### Pipeline de solicitudes
 13. Toda solicitud entrante (de un spoke, del MCP, del flujo de canales o del usuario por `Control`) pasa por: autenticación y scope, normalización (`request_id` si falta, `requester_id` y `route_trace` escritos por el núcleo, descartando lo que el cliente haya puesto en esos campos), `Router.route` y traducción de errores a códigos gRPC.
@@ -126,6 +129,7 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
 30bis. `request_delegation(target_role, description)`: tool expuesta a los subagentes (no a Janus) para pedir trabajo a otro agente sin hablarle directo, preservando el Principio de estrella (`architecture/01`: ningún spoke, y por extensión ningún agente, le habla a otro; todo pasa por Janus). Un subagente que llama a esta tool no crea una tarea por sí mismo: encola el pedido (cola de baja prioridad, requisito 22bis) para que Janus lo procese en su próximo turno disponible y decida si lo convierte en una tarea nueva vía `OrchestrationPort.delegate` (requisito 30), lo descarta o lo reformula. Es azúcar sintáctica sobre `delegate`, no un mecanismo de orquestación nuevo ni un canal directo entre subagentes.
 31. `ProviderHealthSink.report` reenvía a `ProviderChangeAdvisor`. Al aprobarse un cambio, el núcleo persiste el override y reinicia el runtime del agente.
 32. `ApprovalGateway.request` envía la pregunta al usuario por la sesión de canal activa (o la cola de `Control` si no hay canal) y espera la respuesta con `approval.timeout_s` (default 600). Sin respuesta se deniega. Respuestas válidas: aprobar, denegar. Solo identidades verificadas pueden aprobar.
+32bis. `BoundCoreGateway.request_approval(kind, summary, scope_key)` (spec 04, requisito 23), usado hoy por los adaptadores GUI (spec 12, requisito 22bis) y en el futuro por el spoke de visión (spec 15): resuelve `kind` a la clave de política correspondiente (por ejemplo `gui_automation.approval.type_text`), consulta el valor configurado (`ask_everytime`, `ask_once_per_session`, `allow_always`, `deny_always`) y, si corresponde preguntar, delega en `ApprovalGateway.request` (requisito 32) con `scope_key` como clave de caché para `ask_once_per_session`. Devuelve `bool`; nunca lanza por denegación (el adaptador traduce `False` a `ActionDeniedError`, spec 04). `BoundCoreGateway.get_state(key)` y `.put_state(key, value)` leen y escriben un JSON en `preferences` bajo `adapter_state.<spoke_id>.<key>`, aislado por `spoke_id`: es el mecanismo de persistencia del perfil `ASSISTED` de GUI (spec 12, requisito 16) y de cualquier otro estado propio de un adaptador.
 
 ### Supervisión de harness
 33. `HarnessSupervisor` arranca `channel-gateway` como subproceso (`harnesses.channel-gateway.command`), le pasa el token interno por un archivo `0600` y sus puertos por variables de entorno, y lo reinicia según su `FailurePolicy` (spec 09). Su salud se deduce del estado del stream `ChannelBridge` y de un latido.
@@ -278,6 +282,7 @@ Entity SenderVerification { session_id, sender_ref, verified_at?, expires_at?, p
 Entity HarnessState     { name, running: bool, restarts: int, last_error?, connected: bool }
 Enum   DependencyVerdict { RETRY, CANCEL_CASCADE, ASK_USER }
 Enum   TaskFinalizationStatus { DONE, FAILED, INTERRUPTED }   // status de task_finalize, parseado en codigo (requisito 22bis)
+Entity AdapterStateEntry { spoke_id, key, value: dict, updated_at }   // preferences, clave adapter_state.<spoke_id>.<key> (spec 04, requisito 23)
 ```
 
 Configuración adicional en `janus.toml`: `roles.<rol>.capability` y `task.max_attempts` (se suman a la spec 02), `approval.timeout_s`, `harnesses.channel-gateway.command`, `channel_interrupt_mode` por canal (`queue` | `cancel_and_merge`, requisito 22).
@@ -366,6 +371,7 @@ MCP: `list_tools` y `call_tool` sobre el subconjunto de capacidades permitidas p
       default `per_session`, elección del Architect y revisable. Queda la integración con la capacidad de
       biometría de la pregunta 14 de `architecture/09` (sin spec propia aún).
 - [x] Concurrencia interna de Janus (pregunta 9 de `architecture/09`, residual cerrado 2026-09-20): resuelto en el requisito 22 (instanciación por sesión, visibilidad entre sesiones, interrupción configurable por modo de canal) y el requisito 22bis (aviso selectivo vía `task_finalize`, checklist de subtareas sin costo de turno, cola de baja prioridad para pedidos internos, `request_delegation` como única vía de comunicación mediada entre subagentes). Impacto en otras specs ya aplicado: `TaskChecklistItem` y `required` en spec 01 (requisito 15), `checklist_json`/`required`/`tasks.mark_checklist_item` en spec 03 (requisitos 17 y 25), evento `task.subitem_changed` en spec 06 (requisito 12), y aprobación por tipo de acción para GUI automation en spec 12 (requisito 22bis), residual relacionado que salió a la luz en la misma discusión.
+- [x] Implementación de `request_approval`, `get_state` y `put_state` de `CoreGateway` (hueco entre specs 04 y 12): resuelto en el requisito 32bis. `PoolCoordinator` y `SetSpokeAvailability` (absorción de Relay, spec 17): resuelto en el requisito 12bis.
 - [ ] Nombre de tool MCP derivado de `capability_id`: verificar caracteres admitidos por el SDK de MCP al implementar.
 - [x] Servidor ASGI del transporte HTTP del servidor MCP: decidido, `uvicorn` (requisito 7bis). Por verificar al implementar: que el SDK de MCP exponga su aplicación ASGI para montarla en un `uvicorn.Server` propio, que uvicorn no instale sus manejadores de señales (requisito 2) y que existan wheels aarch64 de `uvloop` y `httptools`.
 - [ ] Mapa `roles.<rol>.capability`: valores iniciales propuestos; ajustar con el uso real.

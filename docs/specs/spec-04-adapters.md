@@ -44,7 +44,7 @@ Alcance: contratos, clase base, carga y kit de pruebas. Los adaptadores concreto
 17. Los adaptadores no implementan reintentos con backoff ni circuit breaker sobre `invoke`; eso es `FailurePolicy` en `libs/capabilities/` (spec 09). Sí pueden reconectar el transporte dentro de una misma invocación, de forma acotada y reportada en salud.
 
 ### Puerto al núcleo
-18. `CoreGateway` es una ABC con `request_capability`, `ingest`, `notify_capabilities_changed` y `notify_health_changed`. El núcleo entrega a cada adaptador una instancia ligada a su `spoke_id`: fija `requester_id` y extiende `route_trace` sin que el adaptador pueda suplantar a otro ni declarar su propio origen.
+18. `CoreGateway` es una ABC con `request_capability`, `ingest`, `notify_capabilities_changed`, `notify_health_changed`, `request_approval` y `get_state` y `put_state`. El núcleo entrega a cada adaptador una instancia ligada a su `spoke_id`: fija `requester_id` y extiende `route_trace` sin que el adaptador pueda suplantar a otro ni declarar su propio origen.
 19. Ningún adaptador importa a otro ni referencia spokes por nombre (`architecture/03` sección 3.3). Se verifica en CI con un contrato de independencia (`import-linter`).
 
 ### Carga
@@ -53,6 +53,7 @@ Alcance: contratos, clase base, carga y kit de pruebas. Los adaptadores concreto
 
 ### Kit de pruebas
 22. `janus_adapters.testing` publica `AdapterContractSuite` (mixin de pytest), `FakeCoreGateway` y `EchoAdapter`. Todo adaptador concreto debe tener un test que herede la suite y pase.
+23. Servicios del núcleo para adaptadores (cierra dos huecos de las specs 12 y 15). `request_approval(kind, summary, scope_key) -> bool` envía una acción al `ApprovalGateway` (spec 11, requisito 32); el núcleo resuelve cuál de los cuatro valores de la política aplica según `kind` (por ejemplo `gui_automation.approval.type_text`) y `scope_key` sirve para el caché de `ask_once_per_session`. `get_state` y `put_state` guardan y leen un JSON por adaptador: el núcleo antepone `adapter_state.<spoke_id>.` a la clave y lo persiste en `preferences`, de modo que un adaptador no lee ni escribe el estado de otro. Es el camino del perfil asistido de GUI (spec 12, requisito 16) y del perfil de visión (spec 15). `AdapterContext` gana el campo opcional `pool: PoolHandle | None = None` (spec 17). `FakeCoreGateway` implementa los cuatro métodos nuevos.
 
 ---
 
@@ -232,6 +233,12 @@ class CoreGateway(ABC):      # implementado por core-gateway, una instancia por 
     async def notify_capabilities_changed(self) -> None: ...
     @abstractmethod
     async def notify_health_changed(self, report: HealthReport) -> None: ...
+    @abstractmethod
+    async def request_approval(self, kind: str, summary: str, scope_key: str) -> bool: ...
+    @abstractmethod
+    async def get_state(self, key: str) -> Mapping[str, Any] | None: ...
+    @abstractmethod
+    async def put_state(self, key: str, value: Mapping[str, Any]) -> None: ...
 
 def load_adapter(spec: AdapterSpec, core: CoreGateway, log: BoundLogger) -> SpokeAdapter
 ```
@@ -250,6 +257,8 @@ Jerarquía de errores (todos extienden `AdapterError`):
 | `InterfaceInvalidatedError` | no | La GUI cambió y el mapeo ya no vale (`architecture/03` sección 2.4) |
 | `AdapterStateError` | no | Operación inválida para el estado del ciclo de vida |
 | `AdapterLoadError` | no | Falla al cargar o validar el adaptador |
+| `ActionDeniedError` | no | El usuario o la política de aprobación denegó una acción (`request_approval` devolvió `False`) |
+| `InstanceLaunchError` | sí | No se pudo abrir o ubicar la ventana de una instancia (spec 17) |
 
 ---
 
@@ -297,8 +306,8 @@ Jerarquía de errores (todos extienden `AdapterError`):
 
 ## Open Questions
 - [x] Versión mínima de Python: 3.11, confirmada (el uso de `tomllib` en la spec 02 la justifica).
-- [ ] Puerto de GUI (`GuiSurface`: localizar ventana, detectar elementos, activar) y su relación con `crates/gui-automation`: definido en la spec 12 y consumido en la spec 15.
-- [ ] Dónde se guarda la configuración asistida de `ASSISTED`: propuesta en la spec 12 (tabla `preferences` de SQLite vía el núcleo, no en el adaptador).
+- [x] Puerto de GUI (`GuiSurface`: localizar ventana, detectar elementos, activar) y su relación con `crates/gui-automation`: definido en la spec 12 y consumido en la spec 15.
+- [x] Dónde se guarda la configuración asistida de `ASSISTED`: en `preferences` vía el núcleo, con `get_state` y `put_state` (requisito 23).
 
 ---
 

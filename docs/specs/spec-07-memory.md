@@ -184,7 +184,7 @@ Errores: `MemoryTooLarge`, `EmbedderUnavailable`, `MemoryAccessDenied` (un agent
 - [ ] Verificar al fijar dependencias: que la versión de `fastembed` incluya la corrección de pooling de `intfloat/multilingual-e5-large` (mean pooling y sin normalizar, PR 445 de `fastembed`); que `sqlite-vec` acepte `float[1024]` con `distance_metric=cosine` en la versión fijada; y, para el perfil Pi, que `add_custom_model` con `multilingual-e5-small` funcione y existan wheels de `onnxruntime` para aarch64.
 - [ ] Medir `embed` de `multilingual-e5-large` en CPU y en CUDA (6 GB de VRAM) en la PC del usuario y ajustar los objetivos de latencia.
 - [ ] Recalibrar el umbral de deduplicación (0.95) con el modelo default: E5 concentra las similitudes en un rango alto y el valor puede quedar laxo o estricto.
-- [ ] Catálogo inicial adicional a `profile` (pendiente 1.6 de `TODO.md`): esta spec no siembra más categorías; el mecanismo es auto extensible por diseño.
+- [x] Catálogo inicial adicional a `profile`: esta spec no siembra más categorías; el mecanismo es auto extensible por diseño. Cerrado.
 
 ---
 

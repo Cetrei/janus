@@ -2,7 +2,7 @@
 
 Cada spec sigue el formato del comando `/spec` del rol Architect y está lista para pasarse a un Implementer. Todas se derivan de `architecture/`, `stack/` y `agents/`, que son la fuente de verdad; si una spec contradice esos documentos, se corrige la spec o se abre una decisión explícita.
 
-Estado: **15 de 15 escritas** (2026-09-19). El kanban se construye a partir de ellas (`../../TODO.md`, sección 3).
+Estado: **18 de 18 escritas** (2026-09-20). El kanban se construye a partir de ellas (`../../TODO.md`, sección 2).
 
 ## Orden de implementación
 
@@ -24,15 +24,19 @@ El orden va de lo más fundacional a lo más periférico y respeta las dependenc
 | 12 | [spec-12-gui-automation.md](spec-12-gui-automation.md) | `crates/gui-automation/` | nada | Rust más PyO3. Empieza con un spike de validación. |
 | 13 | [spec-13-voice.md](spec-13-voice.md) | `libs/voice/` | 2 | TTS y STT propios. Tiene compuerta de rendimiento en el Pi. |
 | 14 | [spec-14-channel-gateway.md](spec-14-channel-gateway.md) | `packages/channel-gateway-core/`, `apps/channel-gateway/` | 1 | Fork de OpenClaw. Empieza con auditoría. |
-| 15 | [spec-15-spoke-adapters.md](spec-15-spoke-adapters.md) | `libs/adapters/.../spokes/` | 4, 10, 11, 12, 14 | Adaptadores concretos. Entrega incremental. |
+| 15 | [spec-15-spoke-adapters.md](spec-15-spoke-adapters.md) | `libs/adapters/.../spokes/` | 4, 10, 11, 12, 14, 16, 17 | Adaptadores concretos, incluye el híbrido de visión para GUI. Entrega incremental. |
+| 16 | [spec-16-platform.md](spec-16-platform.md) | `libs/platform/` | nada (stdlib; `psutil` opcional) | Aislamiento de diferencias Linux/Windows. Prerrequisito, se implementa junto a la 1. |
+| 17 | [spec-17-instances-and-usage.md](spec-17-instances-and-usage.md) | pools de instancias, `Control.SetSpokeAvailability` | 4, 9, 11, 12, 15, 16 | Absorción generalizada y multiplataforma de Relay/`claude-toolkit`. |
+| 18 | [spec-18-biometrics.md](spec-18-biometrics.md) | `libs/biometrics/` | 2, 11, 13, 16 | Verificación local de voz y cara, capa opcional de identidad. |
 
-Paralelizable: las specs 2, 3, 6, 8, 12 y 13 no dependen entre sí y pueden implementarse a la vez tras la 1.
+Paralelizable: las specs 2, 3, 6, 8, 12, 13 y 16 no dependen entre sí y pueden implementarse a la vez tras la 1. La 17 depende de la 15 (`GuiChatAdapterBase`/`ClaudeDesktopAdapter`) y de la 16. La 18 depende de la 13 (convenciones de proveedor y compuerta de rendimiento) y de la 16.
 
 ## Cambios respecto al orden original de `TODO.md`
 
 * `proto/` pasa al primer lugar (antes era la sexta): los contratos de adaptador dependen de sus tipos.
 * Se agregan dos specs que ningún ítem del TODO cubría y que quedaban sin dueño: la 13 (`libs/voice/`, residual de la pregunta 8 de `architecture/09`) y la 15 (adaptadores concretos de spoke). La 14 incorpora además el puente de canales hacia el núcleo.
 * `libs/observability/` y `libs/auth/` pasan a ir antes de `apps/core-gateway/`, porque el núcleo las integra.
+* Se agregan tres specs surgidas de un debate posterior al cierre inicial de las 15 (2026-09-20), todas residuales de preguntas ya marcadas RESUELTAS en `architecture/09`: la 16 (`libs/platform/`, aislamiento Linux/Windows, requerido porque Relay se absorbe multiplataforma), la 17 (absorción de Relay/`claude-toolkit`: pools de instancias, disponibilidad manual, sondeo de uso de cuota) y la 18 (`libs/biometrics/`, residual de la pregunta 14). La spec 15 se extiende con `VisionAgentAdapter`, híbrido con el árbol de accesibilidad de la spec 12.
 
 ## Decisiones tomadas en las specs que extienden a `docs/`
 
@@ -40,7 +44,7 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 
 | Decisión | Spec | Estado |
 |---|---|---|
-| Ubicación de agentes: `config/agents/<Nombre>/`; catálogo compartido en `config/catalog/` | 02 | Confirmada (resuelve 1.6 del TODO) |
+| Ubicación de agentes: `config/agents/<Nombre>/`; catálogo compartido en `config/catalog/` | 02 | Confirmada |
 | Paquetes con prefijo `janus` en todos los lenguajes (`janus_*` en Python, `janus-*` en Rust, `@janus/*` en TypeScript); Python 3.11 o superior | 02, 04 | Confirmada (ver `stack/02` sección 4) |
 | Un workspace por ecosistema: `uv` (Python), Cargo (Rust) y bun (TypeScript), cada uno con su lockfile en la raíz | todas | Confirmada (ver `stack/02` sección 3). Bun frente al fork de OpenClaw, por validar en la fase 0 de la spec 14 |
 | Runtimes por ecosistema: `uvicorn` (Python, superficies HTTP), Bun (TypeScript, runtime y gestor), Cargo (Rust) | 11, 14 | Confirmada (ver `stack/02` sección 3.1). Bun frente al fork de OpenClaw y al streaming gRPC, por validar en la fase 0 de la spec 14 |
@@ -64,6 +68,12 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 | `channel-gateway` es cliente gRPC del núcleo; su `port` es solo el endpoint de salud | 14 | Decidido en la spec |
 | Adaptadores concretos dentro de `libs/adapters` con extras opcionales | 15 | Decidido en la spec |
 | Gemini Desktop diferido; su capacidad se cubre con `ApiModelAdapter` | 15 | Decidido en la spec |
+| Relay/`claude-toolkit` no se conserva ni se porta: se absorbe generalizado y multiplataforma (pools de instancias, `UsageProbe`, disponibilidad manual) | 17 | Confirmada |
+| Una sola librería `libs/platform/` en vez de ramas por sistema operativo repetidas en cada spec | 16 | Decidido en la spec |
+| Todo proceso hijo se lanza por `Popen` en un hilo (`janus_platform.spawn`), nunca `asyncio.create_subprocess_exec`, por la exigencia de `Proactor` en Windows | 16 | Decidido en la spec |
+| Biometría: modelos livianos sin LLM (YuNet, SFace, MiniFASNet, WeSpeaker), verificación uno a uno del dueño, local por defecto con nube opt-in explícito | 18 | Confirmada |
+| GUI híbrida: se implementa primero la estrategia (accesibilidad o visión) que resulte más rápida de dejar funcionando según el spike de la spec 12; la otra queda para una actualización posterior | 15 | Confirmada |
+| `CoreGateway` gana `request_approval`, `get_state` y `put_state` para que los adaptadores GUI y de visión persistan perfiles asistidos y pidan aprobación sin acoplarse a `ApprovalGateway` directamente | 4, 11 | Decidido en la spec, cierra un hueco entre las specs 04 y 12 |
 
 ## Correcciones detectadas al verificar tecnologías (septiembre de 2026)
 
@@ -75,6 +85,7 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 * `sqlite-vec` es pre v1 (0.1.x) y hubo problemas con wheels aarch64 en versiones previas (specs 03 y 07).
 * Existe un paquete `janus` en PyPI (cola sync/async de aio-libs) cuyo módulo `janus` colisionaría con un namespace `janus` propio. Se evitó nombrando el paquete proto `janus_proto.v1` (spec 01).
 * `intfloat/multilingual-e5-small` no figura en la lista integrada de modelos de `fastembed` (se registra con `TextEmbedding.add_custom_model`), y la spec 07 afirmaba lo contrario. `intfloat/multilingual-e5-large` (1024 dimensiones) sí figura, y `fastembed` corrigió su pooling (PR 445), así que hay que fijar una versión que lo incluya. La GPU exige el paquete aparte `fastembed-gpu` (specs 02 y 07).
+* Biometría (septiembre de 2026): YuNet (detección de cara, ~232 KB, 6.22 ms p95 en CPU de Raspberry Pi) y SFace (embedding, ~38.7 MB, 99.20 ms p95 en la misma CPU) de OpenCV Zoo; MiniFASNetV2/V1SE (liveness, ~4 MB, menor a 10 ms) de Silent-Face-Anti-Spoofing; WeSpeaker ResNet34 en ONNX (verificación de hablante, EER menor a 1.1% en VoxCeleb1-O, pesos con licencia CC BY 4.0 que exige atribución). Ningún modelo de antifalsificación de voz ligero y verificado disponible; v1 de la spec 18 queda sin él y lo compensa con política (voz sola no autoriza control con más de una señal activa).
 
 ## Cómo usar estas specs
 

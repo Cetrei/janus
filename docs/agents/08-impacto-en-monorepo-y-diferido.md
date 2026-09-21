@@ -35,35 +35,27 @@ fijada ahí, extendiendo responsabilidades:
 - `config/` — cada agente es un folder con su propia topología obligatoria
   (`agents/03-skills-y-config.md`, sección 2.1: `agent.toml` + `agent.md` + `Skills/`/
   `Instructions/`/`Rules/`/`Tools/`) en vez de un archivo único o una sección dentro de
-  `config/janus.toml` — **decisión de ubicación exacta de esos folders dentro del
-  monorepo (p. ej. `config/agents/` vs otra raíz) diferida a `/spec`**.
+  `config/janus.toml`. Ubicación fijada en `config/agents/<Nombre>/`, con catálogo
+  compartido en `config/catalog/` (`specs/spec-02-config.md`, confirmada).
 
 No se introduce ninguna dependencia nueva de lenguaje o runtime respecto a `stack/`:
 todo lo aquí definido es Python (más el fork en Rust de filesystem ya incorporado a
 `stack/02-monorepo.md`), dentro de la estructura ya establecida.
 
-## 2. Explícitamente diferido (no decidido en `agents/`)
+## 2. Diferido a `/spec` y ya resuelto allí
 
-1. **Ubicación exacta de los folders de agente dentro del monorepo** (p. ej.
-   `config/agents/<nombre>/` vs otra raíz) — la topología interna de cada folder
-   (`agents/03-skills-y-config.md`, sección 2.1) está fijada y es obligatoria; dónde
-   vive esa colección de folders se resuelve en `/spec`.
-2. **Definición exacta del catálogo INICIAL de categorías de memoria más allá de
-   `profile`** (`agents/02-memoria.md`, sección 2.1) — el mecanismo es auto-extensible
-   por diseño; no hace falta catálogo cerrado, pero si en `/spec` conviene sembrar
-   alguna categoría adicional de fábrica además de `profile`, se decide ahí.
-3. **Esquema exacto de la tabla de solicitudes en cola**
-   (`agents/07-concurrencia.md`, sección 2) — el modelo conceptual (cola general +
-   carriles por tipo + FIFO) está fijado; el esquema de persistencia/estructura de
-   datos concreto se resuelve en `/spec`.
-4. **Esquema exacto de persistencia de sesiones multi-participante**
-   (`agents/04-orquestacion-y-sesiones.md`, sección 3) — el modelo conceptual (sesión
-   por tarea, suscripción dinámica, cierre por conteo de oyentes externos) está fijado;
-   la estructura de datos concreta (tabla de sesiones, tabla de suscripciones) se
-   resuelve en `/spec`.
+Los cuatro puntos que este documento dejó diferidos se resolvieron en las specs:
 
-Los cuatro puntos anteriores tienen propuesta concreta en `specs/` (specs 02, 03 y 07),
-pendiente de confirmar.
+1. **Ubicación de los folders de agente**: `config/agents/<Nombre>/` y catálogo en
+   `config/catalog/` (`specs/spec-02-config.md`, confirmada).
+2. **Catálogo inicial de categorías de memoria más allá de `profile`**: el mecanismo es
+   auto-extensible, sin catálogo cerrado (`specs/spec-07-memory.md`).
+3. **Esquema de la tabla de solicitudes en cola** (`agents/07-concurrencia.md`, sección
+   2): `specs/spec-03-persistence.md`.
+4. **Esquema de persistencia de sesiones multi-participante**
+   (`agents/04-orquestacion-y-sesiones.md`, sección 3): `specs/spec-03-persistence.md`.
+
+No queda nada diferido en este documento.
 
 Los puntos de motor de reglas de políticas de fallo, y de alternativa al MCP de
 filesystem oficial, que figuraban aquí como diferidos, quedaron resueltos: ver
@@ -77,8 +69,4 @@ filesystem oficial, que figuraban aquí como diferidos, quedaron resueltos: ver
   responsabilidades de la sección 1.
 - `agents/01-modelo-de-agente.md` a `agents/07-concurrencia.md` — el detalle de cada
   responsabilidad nueva.
-- `TODO.md` — el modelo de agentes resuelve el punto 1.1; los puntos 1.2 (multi-avatar,
-  `agents/04-orquestacion-y-sesiones.md`, secciones 3 y 4) y 1.3 (motor de reglas de
-  políticas de fallo, `stack/09-politicas-de-fallo.md`) también figuran ya como
-  resueltos, y los cuatro puntos de la sección 2 de este documento coinciden con el
-  punto 1.6 de `TODO.md`.
+- `specs/README.md` — índice de las specs donde se resolvieron los puntos de la sección 2.

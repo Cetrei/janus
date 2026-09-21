@@ -164,14 +164,15 @@ nuevo, listar perfiles y su disponibilidad).
 
 **Relación con Janus:** Relay es, en esencia, un prototipo funcional acotado de dos
 piezas que en Janus se generalizan a nivel de todo el sistema: el Registro de
-Capacidades (documento 04) y el modelo de Roles (documento 05). Bajo esta
-arquitectura, Relay no desaparece necesariamente — puede tratarse como un spoke más
-que aporta la capacidad ya resuelta de "despachar un prompt a un perfil específico de
-un spoke de razonamiento cerrado", consumida por Janus como una capacidad entre muchas,
-en lugar de que el usuario siga operándolo como sistema aparte. Alternativamente,
-su lógica puede migrar a ser parte nativa del Registro de Capacidades del núcleo de
-Janus — esta decisión se dejaría explícita como pregunta abierta si se retoma en el
-futuro.
+Capacidades (documento 04) y el modelo de Roles (documento 05).
+
+**Decisión (pregunta 13 de `09-preguntas-abiertas.md`, RESUELTA):** ni spoke externo
+adoptado tal cual ni lógica migrada al núcleo. Su código está atado a mecanismos
+específicos de Linux y no se adopta. Se conserva su **función** (orquestar
+múltiples perfiles o instancias de un mismo harness cuando uno se agota), reescrita
+desde cero como un **spoke propio de Janus**: un adaptador cuyo código vive en el
+monorepo, dinámico y multiplataforma. `claude-toolkit` queda deprecado cuando ese
+spoke lo reemplace.
 
 **Limitación relevante:** Relay opera hoy sobre perfiles de un único tipo de spoke de
 razonamiento (múltiples ventanas de una misma aplicación), no sobre múltiples spokes

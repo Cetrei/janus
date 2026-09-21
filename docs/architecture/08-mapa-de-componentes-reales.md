@@ -1,13 +1,22 @@
 # 08 — Mapa de Componentes Reales
 
 ## Estado del documento
-Este es el único documento del conjunto que nombra spokes concretos y describe sus
+Este es el único documento de `architecture/` que nombra spokes concretos y describe sus
 capacidades observadas. Aun así, **no fija implementación de sus adaptadores** — solo
 clasifica cada spoke según el modelo de tipos definido en `03-contrato-de-spoke.md` y
 señala qué capacidades aportaría al Registro de Capacidades (`04-modelo-de-
-capacidades-y-enrutamiento.md`). Ninguna jerarquía entre estos spokes está implícita:
-por el Principio Arquitectónico #1, todos se conectan a Janus de la misma forma
-estructural.
+capacidades-y-enrutamiento.md`). Ninguna jerarquía entre los spokes externos está
+implícita: por el Principio Arquitectónico #1, todos se conectan a Janus de la misma
+forma estructural.
+
+**Actualización posterior al tech-stack.** Este documento se escribió antes de fijar el
+stack (`stack/`). Allí se decidió que Hermes y OpenClaw no se conectan como spokes
+externos sino como **harnesses base**: infraestructura fija de Janus (Hermes extraído
+quirúrgicamente como librería interna, OpenClaw forkeado completo como proceso propio),
+sin arbitraje dinámico entre ellos. Los demás componentes de este documento (OpenClaude,
+Relay, Claude Desktop, Gemini Desktop) siguen siendo spokes externos. Las secciones 1, 3
+y 7 reflejan esa decisión; el detalle de implementación vive en
+`stack/05-harnesses-hermes-openclaw.md`.
 
 Este documento refleja el estado del conocimiento disponible al momento de escribirlo
 (septiembre 2026) y debe tratarse como el más propenso a quedar desactualizado del
@@ -17,10 +26,17 @@ conjunto — los demás documentos son estables porque son arquitectura pura; es
 
 ## 1. Hermes
 
-**Tipo(s) de spoke:** razonamiento (vía BYOM) + ejecución (parcial) + canal/gateway
-multi-canal.
+**Estatus en Janus: harness base, no spoke externo.** Se extrae quirúrgicamente del
+proyecto upstream (`NousResearch/hermes-agent`) hacia `libs/reasoning-engine/`, como
+librería interna de Python. No corre como proceso ni servicio aparte. Qué se trae y qué
+no se detalla en `stack/05-harnesses-hermes-openclaw.md`.
 
-**Capacidades relevantes observadas:**
+**Tipo(s) de spoke (upstream, antes de la extracción):** razonamiento (vía BYOM) +
+ejecución (parcial) + canal/gateway multi-canal. En Janus solo se conserva la parte de
+razonamiento/ejecución; el gateway multi-canal de Hermes no se extrae, porque los
+canales son territorio exclusivo de `channel-gateway`.
+
+**Capacidades relevantes observadas (upstream; no todas se extraen):**
 - Gateway multi-canal ya construido: Telegram, Slack, WhatsApp, Discord, voz.
 - Orquestador de tareas con persistencia propia (`kanban`).
 - Servidor **y** cliente MCP nativos (habla MCP en ambas direcciones).
@@ -30,16 +46,14 @@ multi-canal.
 
 **Limitación relevante para el rol de Implementer/Debugger:** no navega codebases ni
 hace edición consciente de AST/LSP — es débil como editor de código real en un repo.
-Esto significa que, dentro del modelo de roles (documento 05), Hermes es candidato
-natural para roles que dependen de canal/orquestación (coordinación de tareas,
-recepción de solicitudes por mensajería/voz) pero no para el rol Implementer si ese rol
-requiere edición de código consciente de estructura — ahí la capacidad debe resolverse
-delegando a un spoke de tipo ejecución como OpenClaude.
+Esto significa que, dentro del modelo de roles (documento 05), cuando un rol requiere
+edición de código consciente de estructura, esa capacidad debe resolverse delegando a
+un spoke de tipo ejecución como OpenClaude.
 
-**Nota de procedencia:** el nombre "Hermes Agent" se usa en este documento tal como fue
-identificado durante la investigación de origen del proyecto; no se ha verificado aquí
-su licencia ni gobernanza — queda pendiente en `09-preguntas-abiertas.md` si eso importa
-para la decisión de soportarlo de fábrica.
+**Nota de procedencia:** licencia MIT, confirmada compatible con fork, modificación y
+redistribución. La política de seguimiento del upstream (revisión mensual filtrada a
+nuevos proveedores de modelo y advisories de seguridad) está en
+`stack/05-harnesses-hermes-openclaw.md`, sección 4.
 
 ## 2. OpenClaude
 
@@ -67,8 +81,9 @@ para la decisión de soportarlo de fábrica.
 - No tiene servidor MCP propio.
 - No tiene gateway multi-canal — es un CLI de sesión. Para que el usuario pueda pedirle
   trabajo a OpenClaude desde un canal de mensajería o voz, la solicitud debe entrar por
-  un spoke de tipo canal (p. ej. Hermes u OpenClaw) y ser traducida por Janus hacia el
-  adaptador de OpenClaude — nunca conectando ambos spokes entre sí directamente.
+  un componente de tipo canal (en Janus, `channel-gateway`, el harness base derivado de
+  OpenClaw) y ser traducida por Janus hacia el adaptador de OpenClaude — nunca
+  conectando ambos componentes entre sí directamente.
 - No es multi-agente concurrente entre sesiones aisladas escuchando canales distintos
   simultáneamente (sí tiene sub-agentes/tareas dentro de una sesión, y sesiones en
   background gestionables vía CLI).
@@ -84,7 +99,13 @@ explícito en `09-preguntas-abiertas.md` si esto condiciona alguna decisión fut
 
 ## 3. OpenClaw
 
-**Tipo(s) de spoke:** canal/gateway multi-canal + ejecución de automatización general.
+**Estatus en Janus: harness base, no spoke externo.** Se forkea completo en
+`packages/channel-gateway-core/` (TypeScript) y corre como proceso propio en
+`apps/channel-gateway/`. Su rol en Janus es puro transporte de canales: no decide
+personalidad ni razona. Detalle en `stack/05-harnesses-hermes-openclaw.md`.
+
+**Tipo(s) de spoke (upstream):** canal/gateway multi-canal + ejecución de automatización
+general.
 
 **Capacidades relevantes observadas:**
 - Corre como proceso Node.js daemon de larga vida ("Gateway").
@@ -102,16 +123,19 @@ explícito en `09-preguntas-abiertas.md` si esto condiciona alguna decisión fut
   pago, no resuelve el problema de origen por sí solo (ver documento 00, sección 3).
 - Bajo esta arquitectura, OpenClaw **no debe** invocar directamente a OpenClaude (o a
   cualquier otro spoke de ejecución) como subproceso propio dentro de la instalación de
-  Janus — eso sería comunicación spoke→spoke y viola el Principio Arquitectónico #1. Si
-  se usa OpenClaw como spoke de canal dentro de Janus, la delegación hacia un spoke de
-  ejecución debe pasar por el núcleo, no por el mecanismo interno de plugin de OpenClaw.
-  Esto es una restricción de uso, no una limitación técnica de OpenClaw en sí.
+  Janus — eso sería comunicación entre componentes sin pasar por el núcleo y viola el
+  Principio Arquitectónico #1. Si se usa OpenClaw como canal dentro de Janus, la
+  delegación hacia un spoke de ejecución debe pasar por el núcleo, no por el mecanismo
+  interno de plugin de OpenClaw. Esto es una restricción de uso, no una limitación
+  técnica de OpenClaw en sí.
 
-**Solapamiento con Hermes:** OpenClaw y Hermes cubren un tipo de spoke muy similar
-(canal/gateway multi-canal con agentes aislados). Esta arquitectura no obliga a elegir
-uno u otro — ambos pueden coexistir como spokes de canal distintos, cada uno
-gestionando canales diferentes según la configuración del usuario (ver documento 04,
-sección 3, sobre selección cuando hay más de un spoke para la misma capacidad).
+**Solapamiento con Hermes (resuelto):** upstream, ambos cubren un tipo de spoke muy
+similar (canal/gateway multi-canal con agentes aislados). En Janus no hay solapamiento:
+el gateway multi-canal de Hermes no se extrae, los canales son territorio exclusivo de
+`channel-gateway`, y entre harnesses base no existe arbitraje dinámico — cada capacidad
+de harness base tiene un único dueño declarado en `config/janus.toml`
+(`stack/05-harnesses-hermes-openclaw.md` sección 3 y
+`stack/07-descubrimiento-y-capacidades.md` sección 1).
 
 ## 4. Relay
 
@@ -140,14 +164,15 @@ nuevo, listar perfiles y su disponibilidad).
 
 **Relación con Janus:** Relay es, en esencia, un prototipo funcional acotado de dos
 piezas que en Janus se generalizan a nivel de todo el sistema: el Registro de
-Capacidades (documento 04) y el modelo de Roles (documento 05). Bajo esta
-arquitectura, Relay no desaparece necesariamente — puede tratarse como un spoke más
-que aporta la capacidad ya resuelta de "despachar un prompt a un perfil específico de
-un spoke de razonamiento cerrado", consumida por Janus como una capacidad entre muchas,
-en lugar de que el usuario siga operándolo como sistema aparte. Alternativamente,
-su lógica puede migrar a ser parte nativa del Registro de Capacidades del núcleo de
-Janus — esta decisión se dejaría explícita como pregunta abierta si se retoma en el
-futuro.
+Capacidades (documento 04) y el modelo de Roles (documento 05).
+
+**Decisión (pregunta 13 de `09-preguntas-abiertas.md`, RESUELTA):** ni spoke externo
+adoptado tal cual ni lógica migrada al núcleo. Su código está atado a mecanismos
+específicos de Linux y no se adopta. Se conserva su **función** (orquestar
+múltiples perfiles o instancias de un mismo harness cuando uno se agota), reescrita
+desde cero como un **spoke propio de Janus**: un adaptador cuyo código vive en el
+monorepo, dinámico y multiplataforma. `claude-toolkit` queda deprecado cuando ese
+spoke lo reemplace.
 
 **Limitación relevante:** Relay opera hoy sobre perfiles de un único tipo de spoke de
 razonamiento (múltiples ventanas de una misma aplicación), no sobre múltiples spokes
@@ -162,6 +187,12 @@ que el diseño completo de Janus provee y Relay, por sí solo, no.
 - Acceso "gratuito" vía cuenta de consumo (sujeto a límites de mensajes por ventana de
   tiempo), sin exponer una API key utilizable por herramientas externas.
 - Cerrado: sin API de extensión pública más allá de ser cliente de MCP.
+
+**Actualización (septiembre de 2026):** Claude Desktop tiene beta oficial en Linux desde
+el 30 de junio de 2026 (Ubuntu 22.04 o superior y Debian 12 o superior, x86_64 y arm64).
+La beta no incluye Computer Use ni dictado por voz, y no tiene soporte completo de
+atajos globales en Wayland. Esto habilita el uso del mecanismo de automatización de GUI
+en el host Linux y el Raspberry Pi objetivo. Ver `specs/spec-12-gui-automation.md`.
 
 **Consecuencia para el adaptador:** dado que Claude Desktop no expone un servidor ni
 una API que Janus pueda invocar de forma programática convencional, su adaptador se
@@ -187,7 +218,8 @@ Janus lo hace por él a nivel de enrutamiento de capacidades.
 
 **Capacidades relevantes observadas:**
 - Aplicación nativa de Google: lanzada para macOS en abril de 2026, y para Windows el
-  10 de septiembre de 2026 (activada con Alt+Space).
+  10 de septiembre de 2026 (activada con Alt+Space). No se ha verificado una versión para
+  Linux; por eso su adaptador queda diferido en `specs/spec-15-spoke-adapters.md`.
 - Cerrada, sin API de extensión pública conocida más allá de lo que exponga
   nativamente; no se ha identificado un servidor MCP propio.
 
@@ -204,14 +236,14 @@ de escritorio.
 
 ## 7. Tabla resumen de tipos
 
-| Spoke            | Razonamiento | Ejecución | Canal / Gateway | GUI automation |
-|-------------------|:---:|:---:|:---:|:---:|
-| Hermes            | ✅ (BYOM) | parcial (sin AST/LSP) | ✅ | ❌ |
-| OpenClaude        | ✅ | ✅ (fuerte, AST/LSP) | ❌ | ❌ |
-| OpenClaw          | — (delega a harness) | ✅ (vía subprocesos, fuera del alcance recomendado dentro de Janus) | ✅ | ❌ |
-| Relay             | ✅ (orquesta perfiles de un spoke) | ❌ | ❌ | ❌ |
-| Claude Desktop    | ✅ | ❌ | ❌ | ✅ (única vía disponible) |
-| Gemini Desktop    | ✅ | ❌ | ❌ | ✅ (única vía disponible) |
+| Componente        | Estatus en Janus | Razonamiento | Ejecución | Canal / Gateway | GUI automation |
+|-------------------|------------------|:---:|:---:|:---:|:---:|
+| Hermes            | Harness base (extraído) | ✅ (BYOM) | parcial (sin AST/LSP) | ❌ en Janus (el gateway upstream no se extrae) | ❌ |
+| OpenClaude        | Spoke externo | ✅ | ✅ (fuerte, AST/LSP) | ❌ | ❌ |
+| OpenClaw          | Harness base (fork) | — (delega a harness) | ✅ (vía subprocesos, fuera del alcance recomendado dentro de Janus) | ✅ | ❌ |
+| Relay             | Reemplazado por spoke propio reescrito (ver `09-preguntas-abiertas.md`, pregunta 13, RESUELTA) | ✅ (orquesta perfiles de un spoke) | ❌ | ❌ | ❌ |
+| Claude Desktop    | Spoke externo | ✅ | ❌ | ❌ | ✅ (única vía disponible) |
+| Gemini Desktop    | Spoke externo | ✅ | ❌ | ❌ | ✅ (única vía disponible) |
 
 Esta tabla es un resumen de conveniencia; la fuente de verdad conceptual es la
 clasificación narrativa de cada sección anterior.
@@ -221,9 +253,11 @@ clasificación narrativa de cada sección anterior.
   adaptadores debe cumplir, incluyendo el tipo 2.4 usado por Claude Desktop y Gemini
   Desktop.
 - `04-modelo-de-capacidades-y-enrutamiento.md` — cómo se registran y seleccionan las
-  capacidades listadas aquí cuando hay solapamiento (p. ej. Hermes vs. OpenClaw como
-  canal), y cómo el prototipo de Relay se relaciona con el Registro de Capacidades.
+  capacidades listadas aquí cuando hay solapamiento, y cómo el prototipo de Relay se
+  relaciona con el Registro de Capacidades.
 - `10-automatizacion-de-interfaz-grafica.md` — el mecanismo concreto que implementa el
   adaptador de Claude Desktop y Gemini Desktop.
-- `09-preguntas-abiertas.md` — preguntas de procedencia/licencia sobre Hermes y
-  OpenClaude, y el futuro de Relay dentro de Janus, aún no resueltos.
+- `09-preguntas-abiertas.md` — procedencia de OpenClaude, futuro de Relay y
+  reconocimiento biométrico de identidad, todos resueltos.
+- `stack/05-harnesses-hermes-openclaw.md` — decisión de tratar a Hermes y OpenClaw como
+  harnesses base, y cómo se integra cada uno.

@@ -151,8 +151,8 @@ nativa se lo oculta por diseño.
 ## 5. Nota sobre "idioma" y adaptación de salida
 
 Cuando el núcleo de Janus produce un resultado (una respuesta, un estado de tarea, un
-resultado de capacidad), ese resultado existe primero en el modelo semántico interno.
-La cara semántica del adaptador correspondiente lo traduce al formato de salida que ese
+resultado de capacidad), ese resultado existe primero en el modelo semántico interno. La
+cara semántica del adaptador correspondiente lo traduce al formato de salida que ese
 spoke específico espera — no existe un formato de salida único y fijo que todos los
 spokes reciban igual. La adaptación de idioma por spoke es parte constitutiva del
 contrato de cada adaptador, no un detalle de implementación postergable.

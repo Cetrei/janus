@@ -2,7 +2,7 @@
 
 Cada spec sigue el formato del comando `/spec` del rol Architect y está lista para pasarse a un Implementer. Todas se derivan de `architecture/`, `stack/` y `agents/`, que son la fuente de verdad; si una spec contradice esos documentos, se corrige la spec o se abre una decisión explícita.
 
-Estado: **18 de 18 escritas** (2026-09-20). El kanban se construye a partir de ellas (`../../TODO.md`, sección 2).
+Estado: **20 de 20 escritas** (2026-09-25). El kanban se construye a partir de ellas (`../../TODO.md`, sección 2). Las specs 19 y 20 se agregaron el 2026-09-25, a pedido del usuario, tras evaluar el proyecto `NandhaKishorM/laya` (decision model no autorregresivo) y su patrón de uso en interacción con GUI (documentado en la industria para modelos equivalentes tipo Jev/TypeSafe) y en control de dispositivos IoT.
 
 ## Orden de implementación
 
@@ -28,8 +28,10 @@ El orden va de lo más fundacional a lo más periférico y respeta las dependenc
 | 16 | [spec-16-platform.md](spec-16-platform.md) | `libs/platform/` | nada (stdlib; `psutil` opcional) | Aislamiento de diferencias Linux/Windows. Prerrequisito, se implementa junto a la 1. |
 | 17 | [spec-17-instances-and-usage.md](spec-17-instances-and-usage.md) | pools de instancias, `Control.SetSpokeAvailability` | 4, 9, 11, 12, 15, 16 | Absorción generalizada y multiplataforma de Relay/`claude-toolkit`. |
 | 18 | [spec-18-biometrics.md](spec-18-biometrics.md) | `libs/biometrics/` | 2, 11, 13, 16 | Verificación local de voz y cara, capa opcional de identidad. |
+| 19 | [spec-19-decision-model.md](spec-19-decision-model.md) | `libs/decision/` | 1, 2, 4 | Puerto de decision model (System 1); Laya local por defecto, intercambiable como `providers`. Acelera triage (9/11) y elección de elemento en GUI (12/15). |
+| 20 | [spec-20-iot.md](spec-20-iot.md) | `libs/iot/` | 1, 2, 4, 9, 15, 19 | Control de dispositivos (luces, etc.) sobre `McpClientAdapter`; desambigua "cuál dispositivo" con el decision model de la spec 19. |
 
-Paralelizable: las specs 2, 3, 6, 8, 12, 13 y 16 no dependen entre sí y pueden implementarse a la vez tras la 1. La 17 depende de la 15 (`GuiChatAdapterBase`/`ClaudeDesktopAdapter`) y de la 16. La 18 depende de la 13 (convenciones de proveedor y compuerta de rendimiento) y de la 16.
+Paralelizable: las specs 2, 3, 6, 8, 12, 13 y 16 no dependen entre sí y pueden implementarse a la vez tras la 1. La 17 depende de la 15 (`GuiChatAdapterBase`/`ClaudeDesktopAdapter`) y de la 16. La 18 depende de la 13 (convenciones de proveedor y compuerta de rendimiento) y de la 16. La 19 depende solo de 1, 2 y 4, y puede implementarse en paralelo con 9 y 15 (estos la consumen como mejora opcional, no como prerrequisito duro: spec 09/11/12/15 funcionan sin ella). La 20 depende de 15 y 19.
 
 ## Cambios respecto al orden original de `TODO.md`
 
@@ -74,6 +76,7 @@ Estas decisiones no estaban fijadas en `architecture/`, `stack/` ni `agents/`. L
 | Biometría: modelos livianos sin LLM (YuNet, SFace, MiniFASNet, WeSpeaker), verificación uno a uno del dueño, local por defecto con nube opt-in explícito | 18 | Confirmada |
 | GUI híbrida: se implementa primero la estrategia (accesibilidad o visión) que resulte más rápida de dejar funcionando según el spike de la spec 12; la otra queda para una actualización posterior | 15 | Confirmada |
 | `CoreGateway` gana `request_approval`, `get_state` y `put_state` para que los adaptadores GUI y de visión persistan perfiles asistidos y pidan aprobación sin acoplarse a `ApprovalGateway` directamente | 4, 11 | Decidido en la spec, cierra un hueco entre las specs 04 y 12 |
+| Decision model (Laya) como puerto intercambiable `libs/decision`, prefiltro activo por defecto (`judgment.failure_triage_prefilter = decision_model`) por el footprint medido (~1.6 GB, decenas de ms); integrado en triage de fallos (09/11), elección de candidato y detección de cuota en GUI (12/15), y desambiguación de entidades listables (20, IoT abstracto) | 11, 12, 15, 19, 20 | Confirmada (2026-09-25) |
 
 ## Correcciones detectadas al verificar tecnologías (septiembre de 2026)
 

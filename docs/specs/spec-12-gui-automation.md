@@ -1,8 +1,8 @@
 # Feature Spec: crates/gui-automation/ (automatización de GUI en Rust con binding PyO3)
 
 > **Status**: Ready for implementation, con una fase 0 de validación técnica obligatoria (spike)
-> **Last updated**: 2026-09-20
-> **Orden de implementación**: 12 de 15. Independiente del resto hasta la spec 15, que lo consume desde los adaptadores GUI.
+> **Last updated**: 2026-09-25
+> **Orden de implementación**: 12 de 20. Independiente del resto hasta la spec 15, que lo consume desde los adaptadores GUI. La elección de candidato vía decision model (requisito 14) depende opcionalmente de la spec 19, pero el requisito funciona igual sin ella (el adaptador puede pasar el `id`/`hint` ya resuelto por otra vía).
 
 ---
 
@@ -52,7 +52,7 @@ Consecuencia: no existe una solución única y estable para todos los compositor
 11. Estrategia `REALTIME` (preferida): recorrido del árbol de accesibilidad de la ventana enfocada en el momento de necesitarlo (`architecture/10` sección 4.1), con límites de profundidad (default 40) y de nodos (default 5000) y un timeout global (default 3 s).
 12. Detección de respaldo por visión (captura más análisis de imagen u OCR) solo si el spike demuestra que el árbol de accesibilidad no basta para una aplicación. La biblioteca de OCR o visión se elige en el spike, no se fija aquí.
 13. Etiquetas (hints) estilo Vimium: alfabeto configurable (default `asdfghjklqwertyuiopzxcvbnm`), etiquetas de longitud mínima y libres de prefijos (ninguna etiqueta es prefijo de otra), asignadas en orden de lectura (arriba a abajo, izquierda a derecha). Son efímeras: se recalculan en cada mapeo (`architecture/10` sección 3).
-14. Detección y activación son pasos separables: `activate(element_or_hint)` puede usar la acción de accesibilidad del elemento, la pulsación de su etiqueta o un clic en el centro de su `bbox`, según lo que el backend soporte y la configuración.
+14. Detección y activación son pasos separables: `activate(element_or_hint)` puede usar la acción de accesibilidad del elemento, la pulsación de su etiqueta o un clic en el centro de su `bbox`, según lo que el backend soporte y la configuración. **Elección de candidato asistida por decision model (spec 19, requisitos 18 y 19, integrado 2026-09-25):** cuando quien llama a `activate` no conoce de antemano el `id` o `hint` exacto del elemento (por ejemplo, un adaptador que recibió una intención en lenguaje natural como "el botón de enviar") y el espacio de candidatos es enumerable a partir de un `ElementMap` ya mapeado, el adaptador (no esta crate, que no conoce `DecisionModel`) puede resolver la ambigüedad con una `ChoiceQuestion` cuyas `options` son exactamente los `id`/`hint` de ese `ElementMap`, y pasar el resultado a `activate` como `element_or_hint` ya resuelto. Esta crate expone solo el mapa y la activación por id conocido; la elección entre candidatos vía decision model es responsabilidad del adaptador de spec 15, igual que la aprobación de mutación del requisito 22bis. `activate` en sí nunca decide *cuál* elemento, siempre recibe uno ya elegido.
 
 ### Estrategias de vigencia y detección de invalidación (`architecture/10` sección 4)
 15. `MappingStrategy` es `REALTIME` o `ASSISTED` y se declara por spoke (lo expone el adaptador con `GuiDrivenMixin`).
@@ -237,6 +237,7 @@ Excepciones: `PlatformUnsupported`, `WindowNotFound`, `FocusNotVerified`, `Inter
 
 ## Open Questions
 - [x] Política de aprobación para acciones de GUI automation: resuelto, `ApprovalGateway` existente aplicado por tipo de acción (lectura vs mutación), configurable por sesión o global (requisito 22bis).
+- [x] Elección de candidato entre varios elementos ambiguos: resuelto (2026-09-25), el adaptador de spec 15 puede resolverlo con una `ChoiceQuestion` sobre el decision model de la spec 19 (requisito 14); es opcional, `activate` con un `id`/`hint` ya conocido sigue funcionando sin decision model.
 - [ ] Resultado del spike: qué entornos quedan soportados en la primera versión. Actualizar esta spec y `stack/10` al terminarlo.
 - [ ] Confirmar el compositor y el escritorio del equipo de desarrollo y del Raspberry Pi para elegir el primer backend de ventanas Wayland.
 - [ ] Biblioteca de respaldo por visión u OCR: se decide en el spike solo si el árbol de accesibilidad de la app objetivo no basta.

@@ -2,7 +2,7 @@
 
 > **Status**: Ready for implementation
 > **Last updated**: 2026-09-20
-> **Orden de implementación**: 11 de 18. Depende de: specs 01 a 07, 09, 10, 16 y 17. Los adaptadores concretos (spec 15) y `channel-gateway` (spec 14) se conectan a este proceso.
+> **Orden de implementación**: 11 de 20. Depende de: specs 01 a 07, 09, 10, 16 y 17. Los adaptadores concretos (spec 15) y `channel-gateway` (spec 14) se conectan a este proceso. El prefiltro de `DependencyFailureTriage` (requisito 20) depende además de la spec 19 (decision model), pero es una optimización opcional: el requisito funciona igual sin ella si `judgment.failure_triage_prefilter = none`.
 
 ---
 
@@ -69,6 +69,18 @@ Una vez implementada, el sistema completo arranca con un solo comando, un spoke 
     Reemplaza al enum estático `on_dependency_failure` (`BLOCK` | `CANCEL` |
     `RETRY_REASSIGN`) de la propuesta original de esta spec, que no dejaba lugar al
     juicio de Janus por tipo de fallo. Confirmado por el usuario.
+    **Prefiltro con decision model (spec 19, requisito 15, integrado 2026-09-25):** antes
+    de invocar el juicio de Janus, `DependencyFailureTriage.decide` consulta primero al
+    decision model configurado (`DecisionModel.decide`, spec 19) con una `ChoiceQuestion`
+    de opciones exactas `["retry", "cancel_cascade", "ask_user"]` sobre el mismo insumo
+    que se le pasaría a Janus (tipo de fallo de la dependencia, si la capacidad es
+    idempotente, cuántos dependientes hay — nunca el contenido de las tareas). Si la
+    `confidence` de la respuesta supera `judgment.dependency_triage_prefilter_threshold`
+    (spec 02, mismo mecanismo que `decision.triage_confidence_threshold` de la spec 19),
+    se actúa directo sobre ese veredicto sin generar un turno de Janus. Por debajo del
+    umbral, se escala a Janus exactamente como antes. Activo por defecto
+    (`judgment.failure_triage_prefilter = decision_model`, spec 19 requisito 17): el
+    costo de tenerlo encendido es marginal frente al de un turno completo de Janus.
 21. `Control.PauseTask`, `ResumeTask` y `CancelTask`: cancelar aborta la invocación en curso con `aclose()` y marca `CANCELLED`; pausar una tarea `PENDING` la deja en `BLOCKED(paused)`; pausar una `RUNNING` cancela la invocación y la deja `BLOCKED(paused)` para reanudarla con una ejecución nueva sobre la misma sesión (no hay pausa a mitad de una llamada externa).
 
 ### Sesiones

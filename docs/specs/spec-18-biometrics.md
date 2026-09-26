@@ -249,7 +249,7 @@ Errores (fuera del camino normal): RemoteProviderNotAcknowledged, ModelMismatch,
 - [ ] Frontend de características de voz sin PyTorch: evaluar `speakeronnx` (verificar su licencia) o `kaldi-native-fbank`, y confirmar wheels de aarch64 y de Windows.
 - [ ] Umbrales por defecto de cada modelo: se fijan con `calibrate` y datos reales; hasta entonces son valores conservadores con aviso.
 - [ ] Modelo de antifalsificación de voz ligero, abierto y de licencia compatible: sin candidato verificado; diferido hasta que exista. Mientras tanto rige el requisito 10.
-- [ ] Licencia exacta de los pesos de MiniFASNet en su repositorio de origen (la integración de LocalAI la declara Apache 2.0): confirmar antes de redistribuir.
+- [x] Licencia exacta de los pesos de MiniFASNet en su repositorio de origen: confirmada Apache-2.0 leyendo directamente el `LICENSE` del repo upstream `minivision-ai/Silent-Face-Anti-Spoofing` (texto completo sin modificar, copyright 2020 Minivision, sin excepción por archivo para los pesos) -- no solo por la mención de LocalAI. Ver `libs/biometrics/src/janus_biometrics/models.yaml`.
 - [ ] Conteo de muestras de alta que da un falso rechazo aceptable: 5 es el mínimo, se ajusta con `calibrate`.
 - [ ] Canal de voz local del hogar (altavoz con activación por voz): posterior a v1, junto con la conversación dúplex de la spec 13.
 

@@ -163,11 +163,90 @@ que ruff mostro).
 **Estado real al cierre de esta sesion: platform 22/22, config 7/7,
 biometrics 61/61, los tres con ruff limpio. Nada commiteado todavia.**
 
-## Pendiente de gestión
-- Nada commiteado todavía (dos libs nuevas + biometrics modificado, todo
-  en working tree).
-- Licencia de MiniFASNet sigue sin confirmar.
-- Orden de trabajo: quedó documentado que `platform`/`config` deberían
-  haberse implementado antes que `biometrics` según sus propias specs
-  ("se implementa junto a la spec 1" / "2 de 15"); esta sesión resolvió
-  el bloqueo puntual, no reordenó el proceso de las demás specs base.
+## ACTUALIZACION: hashes reales obtenidos (sesion posterior, post-commits)
+El usuario ya commiteo por separado platform, config y biometrics (segun
+el handoff anterior). En la sesion siguiente se descargaron los .onnx
+sueltos (sin clonar el repo completo, via `curl -L` a la URL raw de GitHub,
+que redirige solo a LFS) y se calcularon los hashes reales:
+
+```
+yunet.onnx  233K  sha256: 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+sface.onnx   39M  sha256: 0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79
+```
+
+Ambos tamanios coinciden con lo documentado en spec-18 (YuNet ~232KB,
+SFace ~38.7MB) y `file` confirmo binario real (no punteros LFS sin
+resolver). El hash de yunet coincide ademas con uno visto en una pagina
+de HuggingFace (LibreYOLO/librefacerec-det) que se habia decidido NO usar
+como fuente sin verificar -- ahora esta confirmado por descarga y calculo
+propio, no por esa pagina.
+
+**Pendiente, para el siguiente agente:**
+1. Actualizar `libs/biometrics/src/janus_biometrics/models.yaml.example`:
+   reemplazar los placeholders `sha256: "TODO(confirm): ..."` de `yunet` y
+   `sface` por los dos hashes reales de arriba. `minifasnet` sigue sin URL
+   ni hash (licencia sin confirmar, ver Open Questions de spec-18) --
+   NO tocar esa entrada.
+2. Considerar tambien crear un `models.yaml` real (no `.example`) para uso
+   local del usuario, con `local_path` apuntando a donde el usuario guardo
+   `yunet.onnx`/`sface.onnx` (`~/janus-model-downloads/` en esta sesion) O
+   con `url` + el hash real si se prefiere que se descarguen solos via
+   `ModelCache`. Preguntar al usuario cual prefiere antes de asumir.
+3. Una vez el yaml tenga hashes reales, correr por primera vez un test de
+   integracion real de `SFaceFaceVerifier` contra estos dos modelos (no
+   existe todavia un `test_sface.py` -- ver Testing Requirements de
+   spec-18: "alta y verificacion reales con SFace, YuNet y MiniFASNet sobre
+   imagenes de prueba con licencia libre"). MiniFASNet (liveness) sigue sin
+   resolver, asi que el flujo completo de `verify()` fallara en el paso de
+   liveness hasta que ese tercer modelo tambien este disponible via
+   `local_path`.
+4. `providers/sface.py` nunca se corrio contra pesos reales todavia -- todo
+   lo escrito son suposiciones razonables sobre la forma de entrada/salida
+   de YuNet/SFace/MiniFASNet via cv2, no confirmadas por ejecucion.
+
+## ACTUALIZACION: licencia de MiniFASNet confirmada, NOTICE creado (sesion posterior)
+Se abrio el `LICENSE` del repo upstream `minivision-ai/Silent-Face-Anti-Spoofing`
+directamente (no la mencion indirecta de la integracion de LocalAI que ya
+se habia visto antes): es el texto completo y sin modificar de la Apache
+License 2.0, copyright 2020 Minivision, sin ninguna excepcion de archivo
+aplicada a los pesos del modelo. Esto cierra el Open Question de spec-18
+sobre la licencia de MiniFASNet.
+
+Cambios de esta sesion:
+- `models.yaml` y `models.yaml.example`: entrada `minifasnet` actualizada
+  de `license: "TODO(confirm): ..."` a `license: "Apache-2.0"`, con
+  comentario explicando de donde sale la confirmacion. El `sha256` de
+  `minifasnet` sigue siendo un placeholder a proposito -- no se verifico
+  en esta sesion una URL fija para los pesos ONNX combinados (V2+V1SE),
+  asi que `local_path` sigue siendo el mecanismo correcto (el operador
+  aporta su propio archivo y reemplaza el hash).
+- `docs/specs/spec-18-biometrics.md`: el Open Question de la licencia de
+  MiniFASNet se marco como resuelto (`[x]`), con referencia a donde
+  quedo documentada la confirmacion.
+- `libs/biometrics/NOTICE`: creado por primera vez (lo pedia el Directory
+  Structure y el Security Checklist de spec-18, no existia todavia).
+  Atribuye los cuatro pesos usados por la spec: YuNet (MIT), SFace
+  (Apache-2.0), MiniFASNet (Apache-2.0, con el link al LICENSE upstream) y
+  WeSpeaker ResNet34 (codigo Apache-2.0, pesos entrenados sobre VoxCeleb
+  bajo CC BY 4.0, que exige atribucion -- se cito el paper de VoxCeleb).
+
+**Pendiente real, sin cambios respecto al handoff anterior salvo lo de
+arriba:**
+1. `minifasnet` sigue sin `url` ni `sha256` real -- sigue bloqueado a que
+   el usuario consiga el archivo ONNX combinado (V2+V1SE) el mismo y
+   corra `sha256sum` sobre su copia local.
+2. Nada de lo anterior se probo ejecutando nada (no hubo cambios de
+   codigo esta sesion, solo yaml/markdown/NOTICE) -- no aplica re-correr
+   pytest/ruff por esto.
+3. Sigue pendiente todo lo que ya estaba: `test_sface.py` no existe,
+   `providers/sface.py` no se corrio contra pesos reales, liveness real
+   contra minifasnet sigue sin poder probarse hasta tener el archivo.
+
+## Pendiente de gestion
+- Nada commiteado todavia (dos libs nuevas + biometrics modificado, mas
+  este NOTICE y los cambios de yaml/spec de esta sesion, todo en working
+  tree).
+- Orden de trabajo: quedo documentado que `platform`/`config` deberian
+  haberse implementado antes que `biometrics` segun sus propias specs
+  ("se implementa junto a la spec 1" / "2 de 15"); esta sesion resolvio
+  el bloqueo puntual, no reordeno el proceso de las demas specs base.

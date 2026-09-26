@@ -1,0 +1,53 @@
+janus_biometrics — third-party model attribution
+=================================================
+
+This library loads (but does not vendor) the following pre-trained model
+weights. None of the weight files are stored in this repository; they are
+downloaded on demand (with sha256 verification, see models.py) or supplied
+locally by the operator via `local_path` (see models.yaml). This NOTICE
+exists to satisfy the attribution terms of the licenses below, per
+Section 4(d) of the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------
+
+1. YuNet (face detection)
+   Source:  opencv/opencv_zoo
+             https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
+   License: MIT
+
+2. SFace (face recognition / embedding)
+   Source:  opencv/opencv_zoo
+             https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface
+   License: Apache License, Version 2.0
+
+3. MiniFASNetV2 + MiniFASNetV1SE (face liveness / anti-spoofing)
+   Source:  minivision-ai/Silent-Face-Anti-Spoofing
+             https://github.com/minivision-ai/Silent-Face-Anti-Spoofing
+   License: Apache License, Version 2.0
+             Copyright 2020 Minivision
+             Full LICENSE text: https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/blob/master/LICENSE
+             Confirmed by reading the upstream repository's own LICENSE
+             file directly (not inferred from a third-party integration).
+
+4. WeSpeaker ResNet34 (speaker verification / embedding)
+   Source:  wenet-e2e/wespeaker
+             https://github.com/wenet-e2e/wespeaker
+   License: Apache License, Version 2.0 (project code)
+             Weights trained on VoxCeleb: VoxCeleb data and derived models
+             are distributed under Creative Commons Attribution 4.0
+             International (CC BY 4.0), which requires attribution.
+             https://creativecommons.org/licenses/by/4.0/
+
+--------------------------------------------------------------------------
+
+For items 1, 2 and 3, the full Apache License 2.0 text applies and is
+available at http://www.apache.org/licenses/LICENSE-2.0 — see each
+project's own LICENSE file linked above for the authoritative copy.
+
+For item 4, attribution to the VoxCeleb dataset and the WeSpeaker project
+is given here as required by CC BY 4.0. See:
+  Nagrani, A., Chung, J.S., Zisserman, A. "VoxCeleb: a large-scale speaker
+  identification dataset." INTERSPEECH 2017.
+
+This NOTICE file is for informational purposes only and does not modify
+the license of any of the above works.

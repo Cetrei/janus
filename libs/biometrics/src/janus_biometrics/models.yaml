@@ -5,36 +5,36 @@
 # access and no redistribution question). `sha256` is mandatory in both
 # cases and is verified before the file is ever loaded (see models.py).
 #
-# NOTE: the sha256 values below are placeholders. They are intentionally
-# NOT real hashes: janus_biometrics refuses to load a model whose hash
-# does not match, so a placeholder simply fails closed on first use
-# instead of silently trusting unverified weights. Replace each one with
-# the real sha256 of the file you intend to use before enabling that
-# provider.
+# yunet and sface: hashes confirmed by downloading the files directly and
+# running sha256sum (not copied from a third-party page) -- sizes matched
+# spec-18 (YuNet ~232KB, SFace ~38.7MB) and `file` confirmed real binaries,
+# not unresolved Git LFS pointers.
 
 models:
   yunet:
     # Face detector. opencv/opencv_zoo, MIT license.
-    sha256: "TODO(confirm): sha256sum of face_detection_yunet_2023mar.onnx"
+    sha256: "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
     url: "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
     license: "MIT"
 
   sface:
     # Face embedding (128-dim). opencv/opencv_zoo, Apache-2.0 license.
-    sha256: "TODO(confirm): sha256sum of face_recognition_sface_2021dec.onnx"
+    sha256: "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
     url: "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
     license: "Apache-2.0"
 
   minifasnet:
     # Liveness / anti-spoofing (MiniFASNetV2 + V1SE combined), from the
     # Silent-Face-Anti-Spoofing project (minivision-ai). License confirmed
-    # by reading the upstream repo's own LICENSE file: full, unmodified
-    # Apache License 2.0 text, copyright 2020 Minivision, no per-file
-    # exception for the model weights.
+    # by reading the upstream repo's own LICENSE file directly (not just
+    # the LocalAI integration's mention of it): full, unmodified Apache
+    # License 2.0 text, copyright 2020 Minivision, no per-file exception
+    # carved out for the model weights.
     # https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/blob/master/LICENSE
-    # sha256 is still a placeholder: no fixed upstream URL for the combined
-    # ONNX weights, so `local_path` stays required (operator supplies their
-    # own copy; replace with the real sha256sum of that file before use).
+    # sha256 stays a placeholder: no fixed upstream URL for the combined
+    # ONNX weights was verified in this session, so `local_path` is still
+    # required (operator supplies their own copy; replace with the real
+    # sha256sum of that file before use).
     sha256: "TODO(confirm): sha256sum of your local minifasnet onnx file"
     local_path: "/opt/janus/models/minifasnet_v2_v1se.onnx"
     license: "Apache-2.0"

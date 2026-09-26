@@ -1,9 +1,9 @@
 # Feature Spec: libs/presence/ (identificación ambiental 1:N, "quién entró a la casa")
 
 > **Status**: Ready for implementation
-> **Last updated**: 2026-09-25
+> **Last updated**: 2026-09-24
 > **Vive fuera de `docs/specs/`**: esta es una feature nueva, autocontenida, con su propia spec dentro de su propio directorio (`libs/presence/SPEC.md`), no un spec numerado del índice de Janus. No modifica `docs/specs/spec-18-biometrics.md`, que permanece cerrada tal cual. `libs/biometrics/` gana un consumidor externo (esta librería), nada más.
-> **Orden de implementación relativo**: depende de que `libs/biometrics/` (spec-18) exista como paquete instalable (para reusar detección + embedding de cara), y del índice HNSW vendorizado en `libs/presence/vendor/hnsw/` (ver `vendor/hnsw/SPEC.md`), ya implementado y con su bug de fragmentación de grafo corregido (ver `AGENT.md`, entrada 2026-09-25). No depende de nada del núcleo de Janus (`libs/persistence`, `libs/adapters`, `libs/capabilities`, `apps/*`): es un spoke, se integra a Janus por fuera, no al revés.
+> **Orden de implementación relativo**: depende de que `libs/biometrics/` (spec-18) exista como paquete instalable (para reusar detección + embedding de cara), y del repositorio externo `hnsw-c` (ver `vendor/hnsw-c/`) compilado. No depende de nada del núcleo de Janus (`libs/persistence`, `libs/adapters`, `libs/capabilities`, `apps/*`): es un spoke, se integra a Janus por fuera, no al revés.
 
 ---
 
@@ -17,11 +17,11 @@ Esto es identificación 1:N (¿quién de los que conozco es esta persona, o es a
 
 ---
 
-## Relación con `libs/biometrics` y con el HNSW vendorizado
+## Relación con `libs/biometrics` y con `hnsw-c`
 
 * **`libs/biometrics` (spec-18)**: paquete hermano, no modificado. `presence` lo declara como dependencia de librería (`janus-biometrics` en su `pyproject.toml`) y reusa únicamente sus piezas de detección y extracción de embedding de cara (YuNet + SFace, vía las funciones que `libs/biometrics` ya expone para su propia cadena `local:sface`). `presence` **no** reusa nada de `EncryptedTemplateStore`, `Enrollment` ni la política de umbrales 1:1 de biometrics — tiene su propio almacenamiento y su propia política, descritos abajo.
-* **HNSW vendorizado** (`libs/presence/vendor/hnsw/`, ver `vendor/hnsw/SPEC.md`): código fuente en C puro vendorizado directamente dentro de Janus, **sin git submodule ni repositorio separado** — decisión explícita del usuario para no mantener un fork/repo aparte por esta pieza (ver `AGENT.md`). `presence` lo consume como binario compilado (`hnsw.a` + `include/hnsw.h`) vía `cffi`, tratándolo como el motor de índice vectorial 1:N. Elegido por valor académico y de reuso, no por necesidad de escala real (documentado explícitamente en `vendor/hnsw/SPEC.md`, sección Objective): con las decenas de personas típicas de una casa, una comparación lineal por distancia habría bastado; HNSW se usa porque es la pieza que el usuario quiere lucir académicamente y porque, una vez construida, no cuesta nada reusarla.
-* Ninguno de los dos (`biometrics`, el HNSW vendorizado) depende de `presence`. La dependencia es unidireccional.
+* **`hnsw-c`** (repositorio propio, ver `hnsw-c/SPEC.md`): git submodule en `libs/presence/vendor/hnsw-c/`. `presence` lo consume como binario compilado (`.a` + `include/hnsw.h`) vía `cffi`, tratándolo como el motor de índice vectorial 1:N. Elegido por valor académico y de reuso, no por necesidad de escala real (documentado explícitamente en `hnsw-c/SPEC.md`, sección Objective): con las decenas de personas típicas de una casa, una comparación lineal por distancia habría bastado; HNSW se usa porque es la pieza que el usuario quiere lucir académicamente y porque, una vez construida, no cuesta nada reusarla.
+* Ninguno de los dos (`biometrics`, `hnsw-c`) depende de `presence`. La dependencia es unidireccional.
 
 ---
 
@@ -33,15 +33,15 @@ Esto es identificación 1:N (¿quién de los que conozco es esta persona, o es a
 2. `PersonRecord` para el dueño y familiares se crea explícitamente (alta manual, análoga a `enroll` de biometrics pero con su propio flujo, ver requisito 8), nunca automáticamente. Un desconocido nuevo, en cambio, sí genera un `PersonRecord` automático (`known=false`, sin `label`) al momento de la primera detección sin match — es la única creación automática permitida.
 3. Cambiar el `label` de un `PersonRecord` de `NULL` a un nombre (nombrar a un desconocido) es la única transición de `known=false` a `known=true`; a partir de ahí, según el requisito 12, se descarta el `snapshot_ref` retenido y solo queda el embedding.
 
-### Índice vectorial (HNSW vendorizado)
+### Índice vectorial (hnsw-c)
 
-4. `PresenceIndex` envuelve el HNSW vendorizado vía `cffi`, configurado con `dim=128` (dimensión de embedding de SFace, tal como lo expone `libs/biometrics`). `insert(person_id_as_int, embedding) -> int` (el `id` que HNSW usa es un entero correlativo propio de `presence`, mapeado 1 a 1 con `person_id` en la base local, ver requisito 6); `search(embedding, k=5) -> list[(id, distance_squared)]`; `remove(id)` cuando se borra una persona o una muestra.
+4. `PresenceIndex` envuelve `hnsw-c` vía `cffi`, configurado con `dim=128` (dimensión de embedding de SFace, tal como lo expone `libs/biometrics`). `insert(person_id_as_int, embedding) -> int` (el `id` que HNSW usa es un entero correlativo propio de `presence`, mapeado 1 a 1 con `person_id` en la base local, ver requisito 6); `search(embedding, k=5) -> list[(id, distance_squared)]`; `remove(id)` cuando se borra una persona o una muestra.
 5. Umbral de decisión sobre la distancia devuelta por `search`: `presence.match_threshold` (config, default a calibrar empíricamente, sin valor de fábrica fijo hasta medir con datos reales — mismo criterio honesto que spec-18 aplica a sus propios umbrales). Por debajo del umbral, se considera la misma persona; por encima, desconocido nuevo. Una zona intermedia (`match_threshold_ambiguous`, mayor al umbral principal) es candidata a resolverse con el decision model (requisito 15) en vez de una regla fija.
 
 ### Persistencia (SQLite propio, no `janus.db`)
 
 6. `PresenceStore`: SQLite propio en `state_dir/presence/presence.db` (mismo directorio raíz de estado que usa el resto de librerías locales de Janus, pero un archivo separado, nunca `janus.db` ni ninguna tabla de `libs/persistence`). Tablas: `persons(person_id PK, label, known, first_seen_at, last_seen_at, snapshot_ref)`, `person_embeddings(embedding_id PK, person_id FK, hnsw_id UNIQUE)` (el mapeo entre el entero que usa HNSW y el `person_id` real), `cameras(camera_id PK, label, source_kind)`, `sightings(sighting_id PK, person_id FK, camera_id FK, seen_at, confidence, clip_ref)`.
-7. Igual que `libs/biometrics` (spec-18, requisito 17), el archivo `.db` no guarda embeddings crudos sin cifrar: `person_embeddings` guarda solo `hnsw_id` (el índice vive fuera, en la estructura HNSW en memoria/disco); los embeddings reales (los floats) se persisten únicamente si el HNSW vendorizado implementa su extensión de guardado en disco (ver `vendor/hnsw/SPEC.md`, Open Questions: `hnswIndexSave`/`hnswIndexLoad`); mientras esa extensión no exista, el índice se reconstruye en el arranque leyendo las muestras crudas guardadas en `state_dir/presence/samples/<person_id>/` (cifradas con la misma librería `cryptography` AES-256-GCM que usa biometrics, clave propia de `presence`, nunca compartida con la clave de biometrics).
+7. Igual que `libs/biometrics` (spec-18, requisito 17), el archivo `.db` no guarda embeddings crudos sin cifrar: `person_embeddings` guarda solo `hnsw_id` (el índice vive fuera, en la estructura HNSW en memoria/disco); los embeddings reales (los floats) se persisten únicamente si `hnsw-c` implementa su extensión de guardado en disco (ver `hnsw-c/SPEC.md`, Open Questions); mientras esa extensión no exista, el índice se reconstruye en el arranque leyendo las muestras crudas guardadas en `state_dir/presence/samples/<person_id>/` (cifradas con la misma librería `cryptography` AES-256-GCM que usa biometrics, clave propia de `presence`, nunca compartida con la clave de biometrics).
 8. `PresenceService.enroll_known_person(label: str, samples: list[bytes]) -> PersonRecord`: alta manual de dueño/familiar, análoga a `enroll` de biometrics. Extrae embedding de cada muestra (reusando la detección de `libs/biometrics`), las inserta en el índice, crea el `PersonRecord` con `known=true` desde el inicio.
 
 ### Fuente de frames (interfaz abstracta)
@@ -92,21 +92,10 @@ Esto es identificación 1:N (¿quién de los que conozco es esta persona, o es a
 
 ## Non-Functional Requirements
 
-* **Performance**: sin objetivo numérico de fábrica (se mide igual que biometrics y el HNSW vendorizado, sobre el hardware real del usuario, antes de fijar cifras). El pipeline de detección reusa las cifras ya medidas por `libs/biometrics` para YuNet+SFace; el costo adicional de `presence` es la búsqueda en el índice HNSW (submilisegundo esperado a la escala de personas de una casa, siempre que `hnsw.a` se compile en modo optimizado — ver `vendor/hnsw/README.md`, `LIBFLAGS`/`-O2`, decisión 2026-09-25) y la escritura en SQLite.
+* **Performance**: sin objetivo numérico de fábrica (se mide igual que biometrics y hnsw-c, sobre el hardware real del usuario, antes de fijar cifras). El pipeline de detección reusa las cifras ya medidas por `libs/biometrics` para YuNet+SFace; el costo adicional de `presence` es la búsqueda en el índice HNSW (submilisegundo esperado a la escala de personas de una casa) y la escritura en SQLite.
 * **Security**: mismo criterio que biometrics para datos sensibles de terceros — cifrado en reposo de las muestras crudas retenidas (requisito 7), snapshots borrados de forma segura al nombrar a alguien (requisito 12), sin envío de ningún dato biométrico fuera del equipo (no hay proveedor remoto contemplado en esta spec; si se agregara en el futuro, seguiría el mismo patrón `allow_remote`/`remote_ack` de spec-18). A diferencia de biometrics, esta librería **sí** almacena biometría de terceros por diseño (es su propósito) — esto se documenta explícitamente como una diferencia de postura de privacidad respecto de `libs/biometrics`, no un descuido.
-* **Reliability**: un fallo de `PresenceIndex` (el `.a`/`.so` del HNSW vendorizado no cargó) o de `FrameSource` (cámara ocupada/ausente) nunca debe tumbar el proceso que usa `presence` — se propaga como excepción propia (`PresenceUnavailableError`), nunca un crash silencioso ni un resultado inventado.
-* **Portability**: Python 3.11+ para el paquete `janus_presence`; el binario del HNSW vendorizado es C99 multiplataforma (Linux x86_64/aarch64, ver `vendor/hnsw/SPEC.md`). Dependencias del paquete Python: `janus-biometrics`, `cffi` (para hablar con el HNSW vendorizado), `cryptography` (cifrado de muestras retenidas), `numpy` (manipulación de embeddings antes de pasarlos a `cffi`). Prohibido importar `libs/adapters`, `libs/capabilities`, `libs/persistence` y `apps/*` — igual restricción que biometrics, por ser también una librería hoja / spoke propio.
-
-### Rendimiento del binding `cffi` (`index.py`): dónde Python puede y no puede degradar la ruta caliente
-
-El algoritmo de búsqueda/inserción en sí corre íntegramente en C (`hnswIndexSearch`/`hnswIndexInsert`), en el binario `-O2` de `vendor/hnsw/` (ver decisión de `LIBFLAGS`, `AGENT.md` 2026-09-25). Python nunca ejecuta el bucle interno del algoritmo. El único lugar donde Python puede introducir overhead evitable es en el cruce Python↔C de `index.py`, y estas reglas son obligatorias ahí, no sugerencias:
-
-* **El embedding cruza la frontera `cffi` como un buffer contiguo, nunca elemento por elemento.** `search`/`insert` reciben el vector como `numpy.ndarray` de `dtype=float32` y lo pasan a `cffi` vía `ffi.cast("float *", array.ctypes.data)` (o `ffi.from_buffer`), nunca iterando 128 floats en un `for` de Python para construir un array C. Iterar en Python para construir el buffer sería el único punto de esta librería donde el lenguaje sí impondría un costo por llamada, y es completamente evitable.
-* **`k` en `search(embedding, k=5)` es chico por diseño** (ver requisito 4): la conversión de `HnswSearchResult` a `list[tuple[int, float]]` en el lado Python es una lista de a lo sumo unos pocos elementos, no un costo a optimizar.
-* **`PresenceIndex` no reimplementa ninguna lógica de distancia ni de grafo en Python**, ni siquiera como fallback o para debug — cualquier necesidad de inspeccionar el grafo (para tests, por ejemplo) llama a las funciones C existentes vía `cffi`, no reescribe `hnswDistanceSquared` en Python.
-* **`hnsw.a` debe estar compilado en el modo `-O2` (`LIBFLAGS`) al momento de empaquetar/instalar `presence`**, nunca en el modo debug de tests (`TESTFLAGS`, `-O0 -g`) — ver Open Question de empaquetado del build más abajo. La diferencia medida es ~2.2x (ver `vendor/hnsw/README.md`); usar el binario equivocado en producción sería una regresión de rendimiento silenciosa que ningún test de `presence` detectaría, porque los tests son correctos en ambos binarios, solo más lentos en uno.
-* **Orden de magnitud a tener presente**: la búsqueda HNSW en sí, a la escala de personas de una casa (decenas, no cientos de miles), es submilisegundo. El costo dominante del pipeline de `process_frame` es la detección de cara y el embedding (YuNet + SFace, medido por `libs/biometrics`: ~6ms + ~99ms p95 en la CPU de referencia del Pi), no la búsqueda en el índice. Esto significa que ni el binding `cffi` bien hecho ni ningún error razonable en él van a ser el cuello de botella percibido por el usuario — el requisito real de "prácticamente inmediato" ya lo cumple el propio HNSW en C; la disciplina de esta sección existe para no *introducir* un cuello de botella nuevo por descuido en la capa Python, no porque haya margen que perder si se hace bien.
-* **`PresenceStore` (SQLite) nunca bloquea la ruta de `process_frame` de forma síncrona si eso compite con la captura de frames siguientes** (I/O de disco es órdenes de magnitud más lento que la búsqueda HNSW): la escritura de `sightings`/actualización de `last_seen_at` puede ser síncrona si el consumidor llama `process_frame` de a un frame por vez sin necesidad de procesar el siguiente inmediatamente, pero si `presence` termina corriendo sobre un stream continuo de frames, la escritura a SQLite no debe encadenarse de forma que retrase la próxima detección — decisión de implementación concreta (hilo dedicado vs. cola vs. simplemente síncrono) queda abierta hasta medir el patrón de uso real (ver Open Questions).
+* **Reliability**: un fallo de `PresenceIndex` (hnsw-c no cargó, `.so` ausente) o de `FrameSource` (cámara ocupada/ausente) nunca debe tumbar el proceso que usa `presence` — se propaga como excepción propia (`PresenceUnavailableError`), nunca un crash silencioso ni un resultado inventado.
+* **Portability**: Python 3.11+ para el paquete `janus_presence`; el binario `hnsw-c` es C99 multiplataforma (Linux x86_64/aarch64, ver `hnsw-c/SPEC.md`). Dependencias del paquete Python: `janus-biometrics`, `cffi` (para hablar con `hnsw-c`), `cryptography` (cifrado de muestras retenidas), `numpy` (manipulación de embeddings antes de pasarlos a `cffi`). Prohibido importar `libs/adapters`, `libs/capabilities`, `libs/persistence` y `apps/*` — igual restricción que biometrics, por ser también una librería hoja / spoke propio.
 
 ---
 
@@ -117,10 +106,10 @@ El algoritmo de búsqueda/inserción en sí corre íntegramente en C (`hnswIndex
 * **Reason**: `libs/biometrics` tiene un Security Checklist que describe la garantía de todo el paquete (1:1, sin terceros, sin persistencia de muestras). `presence` hace exactamente lo contrario a propósito (1:N, sí guarda terceros, sí retiene snapshots temporalmente). Fusionarlos en un solo paquete instalable rompe la posibilidad de auditar cada garantía por separado y de instalar una sin la otra.
 * **Rejected alternatives**: `presence` como subpaquete de `libs/biometrics` (mezclaría dos checklists de seguridad contradictorios bajo un mismo nombre instalable); `presence` totalmente independiente sin depender de `biometrics`, duplicando YuNet/SFace (reimplementación innecesaria de una pieza ya resuelta y medida).
 
-### HNSW en C propio, vendorizado directo dentro de Janus, sin submodule ni librería de vectores existente
-* **Chosen**: código fuente en `libs/presence/vendor/hnsw/`, sin git submodule, sin repositorio separado.
-* **Reason**: valor académico explícito del usuario (defensa oral de una materia) más el hecho de que, una vez construida, es la pieza natural de índice 1:N de `presence`. Documentado honestamente en `vendor/hnsw/SPEC.md`: no es la opción de mejor rendimiento para la escala real de este caso de uso (`sqlite-vec` o incluso lineal habrían bastado), es una elección deliberada de reuso y de mérito académico. Vendorizar directo (sin submodule) es decisión explícita del usuario para no mantener un fork/repo aparte por esta pieza.
-* **Rejected alternatives**: `sqlite-vec` (obligaría a depender de `libs/persistence` o a duplicar su lógica de tabla vectorial, rompiendo la independencia del spoke); comparación lineal en Python puro (más simple, pero no aprovecha el trabajo académico que el usuario quiere hacer de cualquier forma); repositorio `hnsw-c` externo como git submodule (descartado a favor de código vendorizado directo, ver `AGENT.md` y `vendor/hnsw/SPEC.md`).
+### HNSW en C propio, vendorizado como submódulo, no `sqlite-vec` ni una librería de vectores existente
+* **Chosen**: repo propio (`hnsw-c`), consumido como git submodule + binario compilado.
+* **Reason**: valor académico explícito del usuario (defensa oral de una materia) más el hecho de que, una vez construida, es la pieza natural de índice 1:N de `presence`. Documentado honestamente en `hnsw-c/SPEC.md`: no es la opción de mejor rendimiento para la escala real de este caso de uso (`sqlite-vec` o incluso lineal habrían bastado), es una elección deliberada de reuso y de mérito académico.
+* **Rejected alternatives**: `sqlite-vec` (obligaría a depender de `libs/persistence` o a duplicar su lógica de tabla vectorial, rompiendo la independencia del spoke); comparación lineal en Python puro (más simple, pero no aprovecha el trabajo académico que el usuario quiere hacer de cualquier forma).
 
 ### SQLite propio, no `libs/persistence`
 * **Chosen**: `state_dir/presence/presence.db`, esquema y migración propios de `presence`, sin tocar `janus.db`.
@@ -148,7 +137,7 @@ flowchart TD
     CAM2[McpCameraSource opcional] --> SVC
     SVC -->|deteccion + embedding| BIO[janus_biometrics: YuNet + SFace]
     SVC -->|insert / search| IDX[PresenceIndex]
-    IDX -->|cffi| HNSW[libs/presence/vendor/hnsw: hnsw.a vendorizado]
+    IDX -->|cffi| HNSW[hnsw-c .so vendorizado]
     SVC --> STORE[PresenceStore: presence.db]
     SVC -->|opcional, NoulQuestion| DM[DecisionModel - libs/decision, spec-19]
     SVC -->|siempre| EVT[person_seen callback]
@@ -165,13 +154,13 @@ libs/presence/
     __init__.py
     service.py            # PresenceService
     models.py             # PersonRecord, Sighting, ClipRecord, PersonSeenEvent
-    index.py              # PresenceIndex, binding cffi al hnsw vendorizado
+    index.py              # PresenceIndex, binding cffi a hnsw-c
     store.py              # PresenceStore, esquema SQLite propio, migraciones propias
     frame_source.py       # FrameSource, LocalCameraSource, McpCameraSource
     decision_gate.py       # integracion opcional con libs/decision
     errors.py             # PresenceUnavailableError, PresenceError
-  vendor/
-    hnsw/                 # código C vendorizado directo, ya implementado (ver vendor/hnsw/SPEC.md)
+    vendor/
+      hnsw-c/             # git submodule, apunta al repo propio hnsw-c
   migrations/
     0001_init.sql
   tests/
@@ -221,7 +210,7 @@ Errores: `PresenceError` (base), `PresenceUnavailableError` (índice o cámara n
 |---|---|
 | Varias caras en un mismo frame | Cada una se procesa por separado; a diferencia de biometrics, no se descarta el frame. |
 | Cámara ocupada o ausente | `PresenceUnavailableError`, sin crashear el proceso consumidor. |
-| El binario del HNSW vendorizado (`hnsw.a`/`.so`) ausente o no carga | `PresenceUnavailableError` al iniciar `PresenceIndex`; `presence` queda inutilizable hasta corregir, pero el fallo es explícito, no silencioso. |
+| `hnsw-c` (`.so`) ausente o no carga | `PresenceUnavailableError` al iniciar `PresenceIndex`; `presence` queda inutilizable hasta corregir, pero el fallo es explícito, no silencioso. |
 | Distancia justo en el borde del umbral, repetidamente para la misma persona real | Zona ambigua (requisito 5); con decision model activo, se resuelve ahí; sin él, se trata como desconocido nuevo cada vez (documentar como limitación conocida hasta calibrar `match_threshold` con datos reales). |
 | Nombrar una persona que ya tenía varias "identidades desconocidas" separadas (la misma persona real detectada como dos `person_id` distintos por mala luz un día) | Fuera de alcance de v1: fusionar dos `PersonRecord` en uno queda como *Open Question*; por ahora se nombra cada uno por separado y el usuario corrige a mano si nota la duplicación. |
 | Disco lleno por clips | `clips_max_total_mb` fuerza borrado de los más viejos antes de escribir uno nuevo; si aun así no hay espacio, se registra el fallo y se omite el clip (nunca se bloquea `process_frame` por esto). |
@@ -233,9 +222,9 @@ Errores: `PresenceError` (base), `PresenceUnavailableError` (índice o cámara n
 
 **Unit Tests**: umbral de match con distancias sintéticas (match claro, no-match claro, zona ambigua); transición `known=false→true` al nombrar y borrado del snapshot; políticas de retención de snapshot y de espacio de clips con reloj/tamaño falsos; las tres vías de disparo de `record_clip` (determinista, decision model, manual) convergiendo a la misma función; `FrameSource` falso para pruebas deterministas sin cámara real.
 
-**Integration Tests**: `PresenceIndex` real contra el HNSW vendorizado ya compilado (insert, search, remove, con el benchmark de `vendor/hnsw/` como referencia de que el binario vendorizado funciona); flujo completo `process_frame` con imágenes de prueba de licencia libre (misma persona repetida, persona nueva, dos personas en un frame); `enroll_known_person` y verificación de que una persona dada de alta manualmente nunca dispara clip automático de "desconocido nuevo".
+**Integration Tests**: `PresenceIndex` real contra `hnsw-c` compilado (insert, search, remove, con el benchmark de `hnsw-c` como referencia de que el binario vendorizado funciona); flujo completo `process_frame` con imágenes de prueba de licencia libre (misma persona repetida, persona nueva, dos personas en un frame); `enroll_known_person` y verificación de que una persona dada de alta manualmente nunca dispara clip automático de "desconocido nuevo".
 
-**Memory/Bridge Tests**: verificar que el binding `cffi` libera correctamente cada `HnswSearchResult` (sin fugas del lado Python-C), ejecutado junto con el `valgrind` de `vendor/hnsw/` cuando sea posible desde el arnés de pruebas de Python.
+**Memory/Bridge Tests**: verificar que el binding `cffi` libera correctamente cada `HnswSearchResult` (sin fugas del lado Python-C), ejecutado junto con el `valgrind` de `hnsw-c` cuando sea posible desde el arnés de pruebas de Python.
 
 ---
 
@@ -253,10 +242,10 @@ Errores: `PresenceError` (base), `PresenceUnavailableError` (índice o cámara n
 - [ ] `presence.match_threshold` y `match_threshold_ambiguous`: sin valores de fábrica hasta calibrar con datos reales del dueño y de al menos un impostor, mismo criterio que spec-18 aplica a sus propios umbrales.
 - [ ] `presence.unknown_snapshot_retention_s`: número de partida por decidir con el usuario (¿24 horas? ¿7 días? depende de cuánta fricción acepta para nombrar gente).
 - [ ] Fusión de dos `PersonRecord` que en realidad son la misma persona (falsos negativos de match por mala captura): no resuelto en v1, ver Edge Cases.
-- [ ] Persistencia del índice HNSW en disco depende de que el HNSW vendorizado implemente `hnswIndexSave`/`hnswIndexLoad` (ver `vendor/hnsw/SPEC.md`, Open Questions); mientras no exista, `presence` reconstruye el índice completo en cada arranque desde las muestras cifradas guardadas — aceptable mientras el número de personas sea chico, a revisar si se vuelve lento.
-- [ ] Empaquetado del build: cómo `libs/presence` invoca la compilación de `vendor/hnsw/` como parte de su propio build (Makefile propio invocado desde el `pyproject.toml`/setup de `presence`, o build manual documentado en el README) — a decidir al implementar `PresenceIndex` (ver `vendor/hnsw/SPEC.md`, Open Questions, misma pregunta desde el otro lado).
+- [ ] Persistencia del índice HNSW en disco depende de que `hnsw-c` implemente `hnsw_index_save`/`hnsw_index_load` (ver `hnsw-c/SPEC.md`, Open Questions); mientras no exista, `presence` reconstruye el índice completo en cada arranque desde las muestras cifradas guardadas — aceptable mientras el número de personas sea chico, a revisar si se vuelve lento.
+- [ ] Formato exacto de `vendor/hnsw-c/` (submodule con build local en cada máquina, vs. copiar solo binarios precompilados por plataforma): a decidir al implementar, según qué tan cómodo sea compilar `hnsw-c` en el Raspberry Pi objetivo.
 
 ---
 
 ## Handoff Note
-Revisar esta spec y `vendor/hnsw/SPEC.md` antes de empezar (este documento depende de decisiones tomadas ahí, en particular la firma de `hnswIndexSearch`/`hnswIndexInsert`/`hnswIndexRemove`, ya implementadas). Crear un checklist desde los requisitos funcionales y marcarlo al avanzar. Levantar dudas antes de codificar, no durante. Orden sugerido: `store.py` y `models.py` primero (sin dependencias externas, fáciles de testear con datos falsos), luego `index.py` contra `hnsw.a` ya compilado (con `-O2`, ver `vendor/hnsw/README.md`), luego `frame_source.py` con `LocalCameraSource`, y `service.py` al final integrando todo. `decision_gate.py` y `McpCameraSource` son extensiones opcionales, se implementan después de que el flujo determinista completo funcione de punta a punta.
+Revisar esta spec y `hnsw-c/SPEC.md` antes de empezar (este documento depende de decisiones tomadas ahí, en particular la firma de `hnsw_index_search`/`insert`/`remove`). Crear un checklist desde los requisitos funcionales y marcarlo al avanzar. Levantar dudas antes de codificar, no durante. Orden sugerido: `store.py` y `models.py` primero (sin dependencias externas, fáciles de testear con datos falsos), luego `index.py` contra `hnsw-c` ya compilado, luego `frame_source.py` con `LocalCameraSource`, y `service.py` al final integrando todo. `decision_gate.py` y `McpCameraSource` son extensiones opcionales, se implementan después de que el flujo determinista completo funcione de punta a punta.

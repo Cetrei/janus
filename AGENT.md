@@ -12,6 +12,8 @@ Documentación y arquitectura completas y cerradas, sin ninguna decisión pendie
 
 **Bug corregido en `libs/presence/vendor/hnsw/` (2026-09-25):** `searchMatchesBruteForceMostly` fallaba (grafo fragmentado en ~11 componentes desconexas). Causa raíz: al bajar de capa durante la inserción, el punto de entrada se recalculaba con descenso greedy de 1 vecino en vez de reusar el mejor candidato ya hallado por la búsqueda amplia (`efConstruction`), quedando atrapado en óptimos locales. Causa secundaria: poda de vecinos (`hnswReplaceFarthestNeighbor`) comparaba 1 a 1 contra el peor en vez de reconsiderar el conjunto completo. Ambas corregidas en `src/hnswIndex.c`. `make test` en verde. Pendiente a futuro (no bloqueante): heurística de diversidad de vecinos, por si aparece degradación de recall con datasets más grandes.
 
+**`libs/biometrics/SPEC.md` (spec-18) ampliada con excepción acotada (2026-09-26):** se agregó el requisito 8bis, `detect_and_embed_faces(image: bytes) -> list[FaceEmbedding]`, función de bajo nivel fuera de `BiometricService` (que es y sigue siendo 1:1, nunca deja salir score ni embedding). Existe exclusivamente para que `libs/presence` (identificación 1:N, ver `libs/presence/SPEC.md`) pueda reusar YuNet+SFace sin duplicar código, sin pasar por la fachada de verificación ni por sus garantías (rechazo de multi-cara, umbral, liveness, política de intentos). La dependencia sigue siendo unidireccional: `presence` depende de `biometrics`, nunca al revés. Implementación en curso en `feat/biometrics`, orden según Handoff Note de spec-18: `base.py`/`policy.py`/`store.py` primero con proveedores falsos.
+
 ## Mapa
 * `TODO.md`: puntero al kanban (GitHub Issues) y próximo paso concreto.
 * `docs/README.md`: índice de la documentación.

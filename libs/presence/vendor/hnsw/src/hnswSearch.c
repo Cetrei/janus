@@ -81,6 +81,20 @@ void hnswBoundedSetInsertSorted(HnswBoundedSet *set, int id, float dist) {
  * Bumping a counter and stamping only the nodes actually visited keeps each call's own
  * visited-tracking cost proportional to what it visits, not to the whole index.
  *
+ * Stops the frontier walk with `break`, not `continue`, once a popped candidate is
+ * already worse than the current worst kept result and `results` is full: no candidate
+ * still in the min-heap can be closer than the one just popped, so nothing left in the
+ * heap can improve `results` either, and draining the rest of the heap was pure waste.
+ * Likewise, a neighbor is only pushed onto the frontier when it could still improve
+ * `results` (the same condition already used to decide whether to keep it); pushing
+ * every unvisited neighbor unconditionally let the frontier balloon with nodes that
+ * were never going to be popped productively, since each expansion adds up to
+ * maxNeighborsPerLayer new entries regardless of whether they are promising. Before
+ * this fix, `hnswExpandLayer` was doing roughly 10x more heap pushes than `ef` should
+ * require per call (measured while profiling construction at N=50000), because neither
+ * limit was in place; this restores both halves of the pruning from SEARCH-LAYER
+ * (Malkov & Yashunin, Algorithm 2) that a wide, unfiltered frontier had been skipping.
+ *
  * @param walk Index, query vector, target layer and starting node id.
  * @param ef Maximum number of result candidates to keep.
  * @return A bounded set with up to `ef` closest ids/distances found, sorted ascending by distance.
@@ -114,7 +128,7 @@ HnswBoundedSet hnswExpandLayer(HnswLayerWalk walk, int ef) {
 
         hnswMinHeapPopMin(&frontier, &currentId, &currentDistPopped);
 
-        if (results.count >= ef && currentDistPopped > results.distances[results.count - 1]) continue;
+        if (results.count >= ef && currentDistPopped > results.distances[results.count - 1]) break;
 
         currentPos = hnswFindNodePosition(walk.index, currentId);
         frontierLayer = walk.layer <= walk.index->nodes[currentPos].layer ? walk.layer : walk.index->nodes[currentPos].layer;
@@ -129,9 +143,9 @@ HnswBoundedSet hnswExpandLayer(HnswLayerWalk walk, int ef) {
 
             neighborDist = hnswDistanceSquared(walk.index->nodes[neighborPos].values, walk.query, walk.index->config.dim);
             walk.index->visitedGeneration[neighborId] = generation;
-            hnswMinHeapPush(&frontier, neighborId, neighborDist);
 
             if (results.count < ef || neighborDist < results.distances[results.count - 1]) {
+                hnswMinHeapPush(&frontier, neighborId, neighborDist);
                 hnswBoundedSetInsertSorted(&results, neighborId, neighborDist);
             }
         }

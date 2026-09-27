@@ -29,7 +29,24 @@ Section 4(d) of the Apache License, Version 2.0.
              Confirmed by reading the upstream repository's own LICENSE
              file directly (not inferred from a third-party integration).
 
-4. WeSpeaker ResNet34 (speaker verification / embedding)
+4. SCRFD (face detection, opt-in alternative to YuNet via local:scrfd)
+   Source:  deepinsight/insightface (antelopev2 model pack)
+             https://github.com/deepinsight/insightface
+   License: Non-commercial research purposes only, per InsightFace's own
+             README ("available for non-commercial research purposes
+             only"). This is NOT the same license class as items 1-3
+             above (MIT/Apache-2.0). Use of this model in this project is
+             an explicit, documented risk decision by the project owner
+             for personal/portfolio use, not a claim that the license
+             permits broader use -- see docs/specs/spec-18-biometrics.md's
+             "Actualizacion 2026-09-26" note for the full reasoning and
+             scope. Anyone reusing this codebase for a different purpose
+             (commercial, redistributed as a product, etc.) must make
+             their own licensing determination before enabling
+             local:scrfd; local:sface (YuNet, MIT) remains available and
+             carries no such restriction.
+
+5. WeSpeaker ResNet34 (speaker verification / embedding)
    Source:  wenet-e2e/wespeaker
              https://github.com/wenet-e2e/wespeaker
    License: Apache License, Version 2.0 (project code)

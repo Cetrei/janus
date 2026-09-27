@@ -25,7 +25,7 @@ class SecretRef(BaseModel):
     file: str | None = None
 
     @model_validator(mode="after")
-    def _exactly_one_source(self) -> "SecretRef":
+    def _exactly_one_source(self) -> SecretRef:
         if bool(self.env) == bool(self.file):
             raise ValueError("SecretRef must set exactly one of 'env' or 'file'")
         return self

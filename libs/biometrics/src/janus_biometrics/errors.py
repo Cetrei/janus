@@ -39,3 +39,7 @@ class SensorUnavailable(BiometricsError):
         super().__init__(f"Sensor '{sensor_id}' is unavailable: {reason}")
         self.sensor_id = sensor_id
         self.reason = reason
+
+
+class ModelSourceError(BiometricsError):
+    """Raised when a model cannot be obtained from its configured source."""

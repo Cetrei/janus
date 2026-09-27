@@ -11,6 +11,41 @@
 # not unresolved Git LFS pointers.
 
 models:
+  scrfd:
+    # Face detector, SCRFD-10GF variant with 5-point keypoints
+    # (scrfd_10g_bnkps.onnx), from InsightFace's antelopev2 model pack
+    # (deepinsight/insightface). Added as an opt-in alternative to yunet
+    # for better tolerance to head tilt/profile angles -- yunet remains
+    # the default detector (no license question, smaller footprint);
+    # this entry is only used if local:scrfd is explicitly configured.
+    #
+    # LICENSE, read explicitly, not assumed clean because it's on
+    # HuggingFace: InsightFace's own code is MIT, but the pretrained
+    # weights (this file) carry InsightFace's own restriction --
+    # "available for non-commercial research purposes only" -- per
+    # github.com/deepinsight/insightface's README. This is a use-scope
+    # restriction (personal, non-commercial), not a resale restriction.
+    # spec-18's "Technical Decisions" section originally rejected
+    # InsightFace/SCRFD for this exact reason; the user has since
+    # reviewed that reasoning and explicitly accepted the risk for this
+    # project (personal use, portfolio, not sold or redistributed as a
+    # product) -- see spec-18's "Actualizacion 2026-09-26" note. This is
+    # a product decision by the user, not a claim that the license
+    # itself changed or is unambiguous.
+    #
+    # sha256 cross-checked against three independent HuggingFace mirrors
+    # of the same antelopev2 pack (Aitrepreneur/insightface,
+    # LPDoctor/insightface, lithiumice/insightface), all reporting the
+    # identical hash below for scrfd_10g_bnkps.onnx -- not verified by
+    # downloading and running sha256sum locally in this session (no
+    # shell/network from this agent), so treat this hash as "strongly
+    # corroborated by independent third parties" rather than
+    # "independently reproduced"; the user should confirm with their own
+    # sha256sum after downloading before trusting it in production.
+    sha256: "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91"
+    url: "https://huggingface.co/Aitrepreneur/insightface/resolve/main/models/antelopev2/scrfd_10g_bnkps.onnx"
+    license: "Non-commercial research only (InsightFace); user has accepted this risk for personal/portfolio use, see spec-18"
+
   yunet:
     # Face detector. opencv/opencv_zoo, MIT license.
     sha256: "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"

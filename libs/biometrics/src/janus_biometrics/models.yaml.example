@@ -13,6 +13,24 @@
 # provider.
 
 models:
+  scrfd:
+    # Face detector, opt-in alternative to yunet for better tolerance to
+    # head tilt/profile angles (local:scrfd variant, see
+    # providers/sface.py's SFaceFaceVerifier docstring). From InsightFace's
+    # antelopev2 pack (deepinsight/insightface), scrfd_10g_bnkps.onnx.
+    #
+    # LICENSE WARNING, read before enabling: unlike every other model in
+    # this file, SCRFD's weights are "available for non-commercial research
+    # purposes only" (InsightFace's own README), not MIT/Apache-2.0. Do
+    # not enable local:scrfd without making your own licensing
+    # determination for your use case -- see NOTICE and
+    # docs/specs/spec-18-biometrics.md for how this project's own decision
+    # was scoped (personal/portfolio use, not commercial, not
+    # redistributed as a product).
+    sha256: "TODO(confirm): sha256sum of scrfd_10g_bnkps.onnx"
+    url: "https://huggingface.co/Aitrepreneur/insightface/resolve/main/models/antelopev2/scrfd_10g_bnkps.onnx"
+    license: "Non-commercial research only (InsightFace) -- read NOTICE before enabling"
+
   yunet:
     # Face detector. opencv/opencv_zoo, MIT license.
     sha256: "TODO(confirm): sha256sum of face_detection_yunet_2023mar.onnx"

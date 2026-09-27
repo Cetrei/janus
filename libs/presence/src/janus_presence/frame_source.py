@@ -50,7 +50,9 @@ class LocalCameraSource(ABC):
                 )
             success, encoded = cv2.imencode(".jpg", frame)
             if not success:
-                raise PresenceUnavailableError(f"camera:{camera_id}", "could not encode frame as JPEG")
+                raise PresenceUnavailableError(
+                    f"camera:{camera_id}", "could not encode frame as JPEG"
+                )
             return bytes(encoded)
         finally:
             capture.release()
@@ -66,7 +68,7 @@ class McpCameraSource:
     inversion of dependency from requisito 10 intact.
     """
 
-    def __init__(self, tool_map: dict[str, "_McpCameraTool"]) -> None:
+    def __init__(self, tool_map: dict[str, _McpCameraTool]) -> None:
         self._tool_map = tool_map
 
     def capture_frame(self, camera_id: str) -> bytes:
@@ -77,7 +79,9 @@ class McpCameraSource:
             )
         frame = tool.capture()
         if not frame:
-            raise PresenceUnavailableError(f"camera:{camera_id}", "MCP camera tool returned no frame")
+            raise PresenceUnavailableError(
+                f"camera:{camera_id}", "MCP camera tool returned no frame"
+            )
         return frame
 
 

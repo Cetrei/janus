@@ -95,7 +95,12 @@ Todo esto se revalida al fijar dependencias. No se verificó en esta sesión nin
 ### Redes chicas de embeddings, sin modelo de lenguaje
 * **Chosen**: YuNet, SFace y MiniFASNet para cara; ResNet34 de WeSpeaker para voz; todos por ONNX u OpenCV en CPU.
 * **Reason**: pedido del usuario (local, liviano, sin LLM). Los tamaños y los benchmarks publicados de estos modelos caben en un Raspberry Pi, y las licencias (MIT, Apache 2.0, CC BY 4.0 con atribución) son compatibles con el proyecto MIT.
-* **Rejected alternatives**: modelos de reconocimiento facial de proyectos con pesos de licencia no verificada (InsightFace, no verificado en esta sesión, queda fuera de v1); reconocimiento en la nube por defecto (rompe la política local); un LLM multimodal como verificador (peso y latencia sin beneficio).
+* **Rejected alternatives** (histórico, ver actualización 2026-09-26 abajo): modelos de reconocimiento facial de proyectos con pesos de licencia no verificada (InsightFace, no verificado en esa sesión, quedó fuera de v1); reconocimiento en la nube por defecto (rompe la política local); un LLM multimodal como verificador (peso y latencia sin beneficio).
+
+**Actualización 2026-09-26 — InsightFace/SCRFD aceptado bajo riesgo asumido por el usuario:** el rechazo de arriba se basaba en que la licencia de InsightFace ("available for non-commercial research purposes only") es ambigua para un repo público de portafolio de uso personal, no en que fuera claramente prohibitiva. El usuario revisó ese razonamiento y decidió explícitamente aceptar el riesgo: el proyecto es de uso personal, no se vende ni se distribuye como producto, y bajo su criterio esa combinación cae dentro de lo que la comunidad trata como uso aceptable de pesos de HuggingFace/InsightFace en proyectos propios. Esta es una decisión de producto del usuario, no una reevaluación técnica de la licencia en sí (el texto de la licencia no cambió). En consecuencia:
+- SCRFD (detector) queda habilitado como opción para mejorar tolerancia a ángulo/perfil frente a YuNet, sin quitar YuNet (que sigue siendo el default de menor huella y sin cuestión de licencia).
+- ArcFace (si se necesita en el futuro para reconocimiento, no solo detección) queda sujeto a la misma decisión, pero no se ha usado todavía; ver Open Questions.
+- Este texto queda como el registro de la decisión y su alcance (uso personal, sin redistribución comercial) si se revisita en el futuro.
 
 ### Verificación uno a uno del dueño, no identificación
 * **Chosen**: comparar contra la plantilla del dueño.

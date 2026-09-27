@@ -4,11 +4,11 @@ import os
 import stat
 import subprocess
 import sys
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 
-class PrivacyStatus(str, Enum):
+class PrivacyStatus(StrEnum):
     PRIVATE = "private"
     OPEN = "open"
     UNKNOWN = "unknown"
@@ -117,7 +117,12 @@ def _privacy_status_windows(path: Path) -> PrivacyStatus:
     # and well-known system/admin accounts. Anything broader (Users,
     # Everyone, Authenticated Users) is OPEN. This is intentionally
     # conservative; ambiguous output falls back to UNKNOWN.
-    broad_principals = ("Everyone", "BUILTIN\\Users", "Authenticated Users", "NT AUTHORITY\\Authenticated Users")
+    broad_principals = (
+        "Everyone",
+        "BUILTIN\\Users",
+        "Authenticated Users",
+        "NT AUTHORITY\\Authenticated Users",
+    )
     if any(principal in output for principal in broad_principals):
         return PrivacyStatus.OPEN
     if username and username in output:

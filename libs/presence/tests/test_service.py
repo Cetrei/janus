@@ -4,8 +4,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from conftest import KEY_A, FakeFrameSource, make_decision_gate, make_embedding
+
 from janus_presence.errors import PersonNotFoundError, PresenceUnavailableError
 from janus_presence.models import PersonSeenEvent
 from janus_presence.service import PresenceService

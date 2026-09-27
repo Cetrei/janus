@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from janus_biometrics.errors import BiometricsError
+from janus_biometrics.errors import BiometricsError, ModelSourceError
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,6 @@ class ModelIntegrityError(BiometricsError):
         self.model_id = model_id
         self.expected_sha256 = expected_sha256
         self.actual_sha256 = actual_sha256
-
-
-class ModelSourceError(BiometricsError):
-    """Raised when a model cannot be obtained from its configured source."""
 
 
 class ModelConfigError(BiometricsError):

@@ -16,6 +16,16 @@ dependencies = [
 
 [project.optional-dependencies]
 face = ["opencv-python-headless"]
+# Separado de `face`: opencv-python-headless no tiene soporte de GUI
+# (cv2.imshow/waitKey no funcionan, y en Linux muchas builds headless de
+# PyPI tampoco traen V4L2 habilitado para captura real), asi que no sirve
+# para manual_camera_check.py ni para ningun preview en vivo. `face-gui`
+# instala opencv-python (con GUI) en vez de la variante headless -- son
+# mutuamente excluyentes, no se deben instalar los dos extras juntos en el
+# mismo entorno (pip/uv puede terminar resolviendo cualquiera de los dos
+# 'cv2', no ambos). Produccion/CI/tests usan `face`; solo
+# manual_camera_check.py necesita `face-gui`.
+face-gui = ["opencv-python"]
 sensors = ["sounddevice"]
 
 [dependency-groups]

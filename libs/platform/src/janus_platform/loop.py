@@ -10,7 +10,9 @@ def _is_windows() -> bool:
     return sys.platform == "win32"
 
 
-def install_shutdown_handlers(loop: asyncio.AbstractEventLoop, on_signal: Callable[[], None]) -> None:
+def install_shutdown_handlers(
+    loop: asyncio.AbstractEventLoop, on_signal: Callable[[], None]
+) -> None:
     """POSIX: registers SIGTERM and SIGINT via loop.add_signal_handler.
     Windows: registers SIGINT and SIGBREAK via signal.signal and forwards to
     the loop with call_soon_threadsafe (add_signal_handler is POSIX-only)."""

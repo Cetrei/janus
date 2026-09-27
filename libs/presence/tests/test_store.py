@@ -3,14 +3,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from conftest import KEY_A, make_embedding
+
 from janus_presence.errors import PersonNotFoundError, PresenceError
 from janus_presence.models import PersonRecord
 from janus_presence.store import PresenceStore
 
 
-def make_person(person_id: str = "p1", known: bool = False, label: str | None = None) -> PersonRecord:
+def make_person(
+    person_id: str = "p1", known: bool = False, label: str | None = None
+) -> PersonRecord:
     now = datetime(2026, 1, 1, tzinfo=UTC)
     return PersonRecord(
         person_id=person_id,

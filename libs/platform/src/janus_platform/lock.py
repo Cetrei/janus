@@ -21,7 +21,7 @@ class InstanceLock:
         self._path = Path(path)
         self._fh = None
 
-    def __enter__(self) -> "InstanceLock":
+    def __enter__(self) -> InstanceLock:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = open(self._path, "a+")  # noqa: SIM115 - kept open for the lock's lifetime
 

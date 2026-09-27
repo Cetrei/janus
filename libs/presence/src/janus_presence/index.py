@@ -68,7 +68,9 @@ class PresenceIndex:
         )
         index = lib.hnswIndexCreate(config[0], initial_capacity)
         if index == ffi.NULL:
-            raise PresenceUnavailableError("hnsw-c", "hnswIndexCreate returned NULL (out of memory)")
+            raise PresenceUnavailableError(
+                "hnsw-c", "hnswIndexCreate returned NULL (out of memory)"
+            )
         self._index = index
 
     def insert(self, hnsw_id: int, embedding: list[float]) -> None:

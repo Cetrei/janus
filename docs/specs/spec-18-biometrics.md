@@ -1,8 +1,8 @@
 # Feature Spec: libs/biometrics/ (verificación local de voz y cara como señal de identidad)
 
 > **Status**: Ready for implementation, con una compuerta de rendimiento y de calibración en el hardware objetivo
-> **Last updated**: 2026-09-20
-> **Orden de implementación**: después de las specs 11 y 13. Depende de: spec 02 (configuración por parámetros), spec 13 (convenciones de proveedor y compuerta de rendimiento) y spec 16 (`janus_platform`). Lo consume `apps/core-gateway` (spec 11, requisito 26ter).
+> **Last updated**: 2026-09-26
+> **Orden de implementación**: después de las specs 11 y 13. Depende de: spec 02 (configuración por parámetros), spec 13 (convenciones de proveedor y compuerta de rendimiento) y spec 16 (`janus_platform`). Lo consume `apps/core-gateway` (spec 11, requisito 26ter) y, solo para su función de bajo nivel `detect_and_embed_faces` (requisito 8bis), `libs/presence` (ver `libs/presence/SPEC.md`) como dependencia de librería unidireccional: `presence` depende de `biometrics`, nunca al revés.
 
 ---
 
@@ -45,6 +45,9 @@ Todo esto se revalida al fijar dependencias. No se verificó en esta sesión nin
 6. Cadena de `local:sface`: detectar (YuNet) y, si hay más de una cara, devolver `INCONCLUSIVE` con motivo `multiple_faces` sin comparar (privacidad y evita elegir a la persona equivocada); alinear con los cinco puntos de referencia; liveness (requisito 7); extraer embedding (SFace); comparar por coseno contra los embeddings de la plantilla.
 7. Liveness: `face.liveness` en `required` (default), `optional` u `off`. Con `required`, un `FAIL` fuerza `LOW` sin importar la similitud. Con `optional`, un `FAIL` degrada un `HIGH` a `MEDIUM`. Por qué `required` es el default: una foto del dueño es el ataque más simple contra una cara.
 8. Control de calidad antes de puntuar: tamaño mínimo de la cara, nitidez y luminancia dentro de rango. Fuera de rango, `quality_ok = false` y `INCONCLUSIVE` con motivo `low_quality`; no es un rechazo del dueño.
+
+### Excepción acotada: `detect_and_embed_faces` para consumidores 1:N (`libs/presence`)
+8bis. `BiometricService` es 1:1 y nunca deja salir un score ni un embedding (requisito 16); `libs/presence` (identificación 1:N, ver `libs/presence/SPEC.md`) necesita exactamente eso: detección multi-cara y el embedding crudo de cada una, para compararlos contra su propio índice HNSW. Resolver esto reusando `verify_face` es imposible sin romper esa garantía (rechaza multi-cara, nunca expone el vector), así que `libs/biometrics` expone una función de bajo nivel separada, fuera de `BiometricService` y de la fachada de verificación: `detect_and_embed_faces(image: bytes) -> list[FaceEmbedding]`, con `FaceEmbedding { embedding: list[float] (dim=128, SFace), quality_ok: bool }`. No aplica liveness, no aplica umbral, no compara contra ninguna plantilla, no pasa por `ProviderRegistry` ni por la política de intentos/bloqueo (requisito 13): es únicamente el paso de detección (YuNet) + extracción de embedding (SFace), reusado tal cual de la cadena `local:sface` para no duplicar ese código. Vive en un módulo propio (`low_level.py`, ver Directory Structure) para que quede visualmente separado de la fachada 1:1, y su docstring/README deja explícito que cualquier llamador recibe biometría cruda y es responsable de su propio manejo seguro (mismo criterio de `libs/presence/SPEC.md`, que sí declara guardar biometría de terceros a diferencia de esta librería). No se registra en el Registro de Capacidades (mismo criterio que el requisito 5): es una función de biblioteca, no algo que un spoke pida por MCP.
 
 ### Voz
 9. Cadena de `local:wespeaker-resnet34`: normalizar a 16 kHz mono; recortar silencio; exigir duración mínima de habla (default 2.5 s; con menos, `INCONCLUSIVE` con motivo `too_short`); extraer características de espectro (`fbank` de 80 bandas); embedding; coseno contra la plantilla.
@@ -153,6 +156,7 @@ libs/biometrics/
     enrollment.py     # alta y calibracion
     store.py          # EncryptedTemplateStore
     sensors.py        # SensorSource, CameraSource, MicrophoneSource
+    low_level.py      # detect_and_embed_faces (excepcion acotada req. 8bis, consumida por libs/presence)
     models.py         # descarga y verificacion por hash
     providers/        face_sface.py liveness_minifas.py speaker_wespeaker.py null.py
     bench.py  __main__.py  errors.py
@@ -192,6 +196,7 @@ BiometricService.verify_voice(audio: PcmAudio, profile: str = "owner") -> Biomet
 BiometricService.verify_face(image: bytes, profile: str = "owner") -> BiometricResult
 BiometricService.capture_and_verify(sensor_id: str, kind: str, profile: str = "owner") -> BiometricResult
 BiometricService.status() -> BiometricStatus       BiometricService.health() -> list[BiometricHealth]
+detect_and_embed_faces(image: bytes) -> list[FaceEmbedding]   # excepcion acotada, req. 8bis; fuera de BiometricService, consumida por libs/presence
 CLI: python -m janus_biometrics enroll|list|delete|keygen|bench|calibrate
 Errores (fuera del camino normal): RemoteProviderNotAcknowledged, ModelMismatch, EnrollmentError, KeyUnavailable, SensorUnavailable
 ```
@@ -236,6 +241,7 @@ Errores (fuera del camino normal): RemoteProviderNotAcknowledged, ModelMismatch,
 - [ ] Voz sola no autoriza control con más de una señal activa
 - [ ] Atribución de pesos con licencia CC BY 4.0, MIT y Apache 2.0 en `NOTICE`
 - [ ] Entradas de audio e imagen validadas (tamaño y tipo) antes de decodificar
+- [ ] `detect_and_embed_faces` (requisito 8bis) documentada en README como excepción explícita: expone embeddings crudos multi-cara, fuera de la garantía 1:1 del resto de la librería, y su uso queda acotado a `libs/presence`
 
 ---
 
@@ -243,11 +249,11 @@ Errores (fuera del camino normal): RemoteProviderNotAcknowledged, ModelMismatch,
 - [ ] Frontend de características de voz sin PyTorch: evaluar `speakeronnx` (verificar su licencia) o `kaldi-native-fbank`, y confirmar wheels de aarch64 y de Windows.
 - [ ] Umbrales por defecto de cada modelo: se fijan con `calibrate` y datos reales; hasta entonces son valores conservadores con aviso.
 - [ ] Modelo de antifalsificación de voz ligero, abierto y de licencia compatible: sin candidato verificado; diferido hasta que exista. Mientras tanto rige el requisito 10.
-- [ ] Licencia exacta de los pesos de MiniFASNet en su repositorio de origen (la integración de LocalAI la declara Apache 2.0): confirmar antes de redistribuir.
+- [x] Licencia exacta de los pesos de MiniFASNet en su repositorio de origen: confirmada Apache-2.0 leyendo directamente el `LICENSE` del repo upstream `minivision-ai/Silent-Face-Anti-Spoofing` (texto completo sin modificar, copyright 2020 Minivision, sin excepción por archivo para los pesos) -- no solo por la mención de LocalAI. Ver `libs/biometrics/src/janus_biometrics/models.yaml`.
 - [ ] Conteo de muestras de alta que da un falso rechazo aceptable: 5 es el mínimo, se ajusta con `calibrate`.
 - [ ] Canal de voz local del hogar (altavoz con activación por voz): posterior a v1, junto con la conversación dúplex de la spec 13.
 
 ---
 
 ## Handoff Note
-Revisar esta spec antes de empezar. Crear un checklist desde los requisitos funcionales y marcarlo al avanzar. Levantar dudas antes de codificar, no durante. Implementar primero `base.py`, `policy.py` y `store.py` con proveedores falsos; luego `bench` y `calibrate` para tener cifras reales en el hardware del usuario antes de pulir los proveedores.
+Revisar esta spec antes de empezar. Crear un checklist desde los requisitos funcionales y marcarlo al avanzar. Levantar dudas antes de codificar, no durante. Implementar primero `base.py`, `policy.py` y `store.py` con proveedores falsos; luego `bench` y `calibrate` para tener cifras reales en el hardware del usuario antes de pulir los proveedores. `low_level.py` (`detect_and_embed_faces`, requisito 8bis) se implementa junto con el proveedor `local:sface` real (comparte YuNet+SFace), no antes: antes de eso no hay nada que envolver.

@@ -1,0 +1,40 @@
+# Model source configuration for janus_biometrics.
+#
+# Each entry needs exactly one of `url` (downloaded and cached locally) or
+# `local_path` (an operator-supplied file, read directly, no network
+# access and no redistribution question). `sha256` is mandatory in both
+# cases and is verified before the file is ever loaded (see models.py).
+#
+# NOTE: the sha256 values below are placeholders. They are intentionally
+# NOT real hashes: janus_biometrics refuses to load a model whose hash
+# does not match, so a placeholder simply fails closed on first use
+# instead of silently trusting unverified weights. Replace each one with
+# the real sha256 of the file you intend to use before enabling that
+# provider.
+
+models:
+  yunet:
+    # Face detector. opencv/opencv_zoo, MIT license.
+    sha256: "TODO(confirm): sha256sum of face_detection_yunet_2023mar.onnx"
+    url: "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+    license: "MIT"
+
+  sface:
+    # Face embedding (128-dim). opencv/opencv_zoo, Apache-2.0 license.
+    sha256: "TODO(confirm): sha256sum of face_recognition_sface_2021dec.onnx"
+    url: "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
+    license: "Apache-2.0"
+
+  minifasnet:
+    # Liveness / anti-spoofing (MiniFASNetV2 + V1SE combined), from the
+    # Silent-Face-Anti-Spoofing project (minivision-ai). License confirmed
+    # by reading the upstream repo's own LICENSE file: full, unmodified
+    # Apache License 2.0 text, copyright 2020 Minivision, no per-file
+    # exception for the model weights.
+    # https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/blob/master/LICENSE
+    # sha256 is still a placeholder: no fixed upstream URL for the combined
+    # ONNX weights, so `local_path` stays required (operator supplies their
+    # own copy; replace with the real sha256sum of that file before use).
+    sha256: "TODO(confirm): sha256sum of your local minifasnet onnx file"
+    local_path: "/opt/janus/models/minifasnet_v2_v1se.onnx"
+    license: "Apache-2.0"

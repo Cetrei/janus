@@ -1,2 +1,25 @@
 _deprecated/
 AGENT.md
+
+# libs/presence/vendor/hnsw build artifacts
+libs/presence/vendor/hnsw/*.o
+libs/presence/vendor/hnsw/src/*.o
+libs/presence/vendor/hnsw/tests/*.o
+libs/presence/vendor/hnsw/*.a
+libs/presence/vendor/hnsw/*.so
+libs/presence/vendor/hnsw/tests/testDistanceRandom
+libs/presence/vendor/hnsw/tests/testInsertSearch
+libs/presence/vendor/hnsw/tests/testRemove
+libs/presence/vendor/hnsw/tests/testBenchmark
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+*.so
+libs/presence/src/janus_presence/_hnsw_cffi.*
+libs/presence/hnsw.a
+libs/presence/vendor/hnsw/hnsw.a
+libs/presence/vendor/hnsw/bin/

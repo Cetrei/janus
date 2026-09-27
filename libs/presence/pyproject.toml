@@ -1,0 +1,48 @@
+[project]
+name = "janus-presence"
+version = "0.1.0"
+description = "1:N environmental person identification for Janus (\"who walked into the house\"), separate from janus-biometrics' 1:1 owner verification"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "janus-biometrics",
+    "janus-platform",
+    "cffi",
+    "cryptography",
+    "numpy",
+]
+
+[project.optional-dependencies]
+camera = [
+    "opencv-python-headless",
+]
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "ruff", "cffi"]
+
+[tool.uv.sources]
+janus-biometrics = { path = "../biometrics", editable = true }
+janus-platform = { path = "../platform", editable = true }
+
+[build-system]
+requires = ["hatchling", "cffi"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/janus_presence"]
+# The compiled cffi extension lands here at build time (build_hnsw.py's
+# target=); it has no source file under src/ to point hatchling at ahead
+# of time, so it must be listed as an explicit artifact or the wheel
+# builder will silently drop it.
+artifacts = ["src/janus_presence/_hnsw_cffi*"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

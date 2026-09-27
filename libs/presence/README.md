@@ -1,0 +1,57 @@
+# janus-presence
+
+Identificación ambiental 1:N para Janus ("quién entró a la casa"). Distinto
+y separado de `janus-biometrics` (verificación 1:1 del dueño, spec-18):
+`presence` identifica cuál de varias personas conocidas es alguien, o si
+es un desconocido nuevo, sin autorizar ninguna acción por sí mismo — solo
+emite quién fue visto, con una confianza. Qué significa ese "quién" (dueño,
+familiar, visita autorizada) es responsabilidad de quien consuma el evento
+`person_seen`.
+
+**Esta librería almacena biometría de terceros por diseño.** A diferencia
+de `janus-biometrics`, que es estrictamente 1:1 y no retiene muestras,
+`presence` guarda embeddings de forma indefinida (para poder reconocer a
+la misma persona en el futuro) y snapshots temporales de desconocidos
+mientras no se les asigna un nombre. No confundir las garantías de una
+librería con las de la otra.
+
+Ver `SPEC.md` para el detalle funcional completo.
+
+## Estado
+
+Implementado: `models.py`, `errors.py`, `store.py` (SQLite propio +
+muestras cifradas AES-256-GCM), `index.py` (binding cffi a `hnsw-c`),
+`frame_source.py` (`LocalCameraSource`, `McpCameraSource`),
+`decision_gate.py` (integración opcional con `libs/decision`, spec-19),
+`service.py` (`PresenceService`, orquesta todo). Pendiente antes de
+considerarlo probado: compilar `vendor/hnsw/` y escribir los tests
+(unit, integration, memory/bridge) que pide `SPEC.md`.
+
+## Dependencias locales
+
+Depende de `janus-biometrics` (detección + embedding de cara, YuNet +
+SFace) y `janus-platform` (permisos de archivo), resueltas como paths
+locales del monorepo vía `[tool.uv.sources]`, no como paquetes publicados.
+
+## Compilar `hnsw-c` antes de instalar
+
+`vendor/hnsw/` es la única pieza no-Python. El binding cffi (`index.py`,
+vía `build_hnsw.py`) enlaza contra `hnsw.a`, que no viene compilado:
+
+```bash
+cd vendor/hnsw && make && cd ../..
+```
+
+Esto debe correrse (o volver a correrse tras cualquier cambio en
+`vendor/hnsw/`) antes de `uv sync`, ya que el build hook de `pyproject.toml`
+compila la extensión cffi contra ese `.a` en build-time y falla
+explícitamente si no lo encuentra.
+
+## Instalación
+
+```bash
+cd vendor/hnsw && make && cd ../..
+uv sync --extra camera   # opencv-python-headless para LocalCameraSource
+uv run pytest -v
+uv run ruff check .
+```

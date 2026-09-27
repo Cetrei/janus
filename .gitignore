@@ -18,3 +18,8 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 build/
+*.so
+libs/presence/src/janus_presence/_hnsw_cffi.*
+libs/presence/hnsw.a
+libs/presence/vendor/hnsw/hnsw.a
+libs/presence/vendor/hnsw/bin/

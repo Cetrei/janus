@@ -11,3 +11,10 @@ libs/presence/vendor/hnsw/tests/testDistanceRandom
 libs/presence/vendor/hnsw/tests/testInsertSearch
 libs/presence/vendor/hnsw/tests/testRemove
 libs/presence/vendor/hnsw/tests/testBenchmark
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/

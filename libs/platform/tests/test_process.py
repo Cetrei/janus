@@ -6,7 +6,9 @@ import pytest
 
 from janus_platform.process import spawn
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="uses POSIX shell commands to exercise spawn")
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="uses POSIX shell commands to exercise spawn"
+)
 
 
 def test_spawn_rejects_command_string():

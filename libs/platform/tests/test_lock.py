@@ -7,7 +7,9 @@ import pytest
 from janus_platform.errors import LockHeld
 from janus_platform.lock import InstanceLock
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="uses os.fork via subprocess for the held-lock test")
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="uses os.fork via subprocess for the held-lock test"
+)
 
 
 def test_instance_lock_acquires_and_releases(tmp_path):

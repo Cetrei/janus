@@ -242,6 +242,47 @@ arriba:**
    `providers/sface.py` no se corrio contra pesos reales, liveness real
    contra minifasnet sigue sin poder probarse hasta tener el archivo.
 
+## ACTUALIZACION: MiniFASNet resuelto como dos modelos separados (sesion posterior)
+El bloqueo de arriba ("no existe un combinado V2+V1SE") se resolvio de
+raiz: minivision-ai nunca publico un ONNX combinado, solo dos `.pth`
+separados. `models.yaml` (no `.example`) ya tenia, al empezar esta sesion,
+dos entradas reales -- `minifasnet_v2` y `minifasnet_v1se` -- con URLs
+reales (release de `github.com/leandroveronezi/go-onnxface`, MIT, pesos
+re-exportados directo desde los `.pth` de minivision-ai sin conversion
+float16) y hashes sha256 ya verificados en esa sesion (descarga +
+`sha256sum` + `onnx.checker.check_model` + forma de entrada/salida
+confirmada: `[1,3,80,80]` / `[1,3]`, coincide con lo que `sface.py` ya
+asumia). Eso quedo cerrado antes de esta sesion; no se toco de nuevo.
+
+Lo que SI se hizo en esta sesion: `providers/sface.py` seguia desalineado
+con ese yaml -- asumia un solo archivo combinado (`self._cache.resolve("minifasnet")`,
+una sola sesion onnxruntime, una sola inferencia). Corregido:
+- Dos sesiones lazy-loaded (`_liveness_session_v2`, `_liveness_session_v1se`),
+  resueltas via `self._cache.resolve("minifasnet_v2")` /
+  `resolve("minifasnet_v1se")`.
+- Nuevo metodo `_ensemble_live_score`: aplica softmax por separado a cada
+  modelo (los outputs son logits crudos de 3 clases, no probabilidades) y
+  promedia las probabilidades resultantes antes de tomar la clase "live" --
+  promediar logits crudos no es equivalente y habria sido incorrecto.
+- `close()` actualizado para liberar ambas sesiones.
+
+**Pendiente real, sin cambios de fondo:**
+1. Sin shell/red desde esta sesion (solo filesystem MCP, sin exec): no se
+   pudo correr `uv sync`/`pytest`/`ruff` ni descargar los `.onnx` para
+   confirmar por ejecucion. El codigo de arriba es correccion de logica
+   con intencion de pasar, no confirmada corriendo nada.
+2. `test_sface.py` sigue sin existir. Para escribirlo con integracion
+   real (no fakes) hace falta: (a) que los tres `.onnx` (yunet, sface,
+   minifasnet_v2, minifasnet_v1se) esten descargados y verificados en el
+   entorno donde corran los tests, y (b) imagenes de prueba con licencia
+   libre (no hay ninguna en el repo todavia -- agregar a
+   `tests/fixtures/` o similar, con su propia atribucion en NOTICE si
+   corresponde).
+3. Antes de mergear a `master`: correr `uv sync --extra face` +
+   `uv run pytest -v` + `uv run ruff check .` en `libs/biometrics` para
+   confirmar que el fix de `sface.py` no rompio nada de lo que ya
+   pasaba (61/61 previos), ya que esta sesion no pudo verificarlo.
+
 ## Pendiente de gestion
 - Nada commiteado todavia (dos libs nuevas + biometrics modificado, mas
   este NOTICE y los cambios de yaml/spec de esta sesion, todo en working

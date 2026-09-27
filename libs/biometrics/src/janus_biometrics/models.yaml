@@ -23,18 +23,34 @@ models:
     url: "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
     license: "Apache-2.0"
 
-  minifasnet:
-    # Liveness / anti-spoofing (MiniFASNetV2 + V1SE combined), from the
-    # Silent-Face-Anti-Spoofing project (minivision-ai). License confirmed
-    # by reading the upstream repo's own LICENSE file directly (not just
-    # the LocalAI integration's mention of it): full, unmodified Apache
-    # License 2.0 text, copyright 2020 Minivision, no per-file exception
-    # carved out for the model weights.
-    # https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/blob/master/LICENSE
-    # sha256 stays a placeholder: no fixed upstream URL for the combined
-    # ONNX weights was verified in this session, so `local_path` is still
-    # required (operator supplies their own copy; replace with the real
-    # sha256sum of that file before use).
-    sha256: "TODO(confirm): sha256sum of your local minifasnet onnx file"
-    local_path: "/opt/janus/models/minifasnet_v2_v1se.onnx"
+  minifasnet_v2:
+    # Liveness / anti-spoofing, MiniFASNetV2 (2.7_80x80), one half of the
+    # ensemble used by Silent-Face-Anti-Spoofing (minivision-ai). Softmax
+    # outputs of this model and minifasnet_v1se are averaged before
+    # argmax (see providers/sface.py), matching the upstream-recommended
+    # setup (same approach LocalAI's own integration uses).
+    #
+    # minivision-ai only publishes PyTorch .pth weights, never ONNX. This
+    # ONNX export is re-hosted by github.com/leandroveronezi/go-onnxface
+    # (MIT-licensed code, does not claim authorship of the weights),
+    # produced directly against minivision-ai's own published
+    # 2.7_80x80_MiniFASNetV2.pth using the upstream repo's own model
+    # definition (src/model_lib/MiniFASNet.py), no float16 conversion.
+    # Verified in this session: downloaded, sha256 computed locally,
+    # onnx.checker.check_model passed, input [1,3,80,80] / output [1,3]
+    # confirmed (matches providers/sface.py's existing 80x80 crop and
+    # 3-class softmax handling).
+    # License: Apache-2.0, inherited from minivision-ai (see NOTICE) --
+    # the MIT license on go-onnxface's own code does not relicense the
+    # weights it redistributes.
+    sha256: "fa2cddb678630906f7b60b0f63b2d31c413ee2ee158b4f3a9b42ea2a6de4309f"
+    url: "https://github.com/leandroveronezi/go-onnxface/releases/download/models-v1/minifasnet_v2.onnx"
+    license: "Apache-2.0"
+
+  minifasnet_v1se:
+    # Liveness / anti-spoofing, MiniFASNetV1SE (4_0_0_80x80), the other
+    # half of the ensemble (see minifasnet_v2 above for the shared
+    # rationale, source, and verification notes).
+    sha256: "2aaf58e4d80295eb767a6275db1ecec9a16b129a3263f45b6eaf4d6c4d5be29b"
+    url: "https://github.com/leandroveronezi/go-onnxface/releases/download/models-v1/minifasnet_v1se.onnx"
     license: "Apache-2.0"

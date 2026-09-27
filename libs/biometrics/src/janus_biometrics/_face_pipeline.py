@@ -75,7 +75,9 @@ def check_quality(frame: np.ndarray, face: np.ndarray) -> tuple[bool, str]:
     return True, "ok"
 
 
-def embed_face(recognizer: cv2.FaceRecognizerSF, frame: np.ndarray, face: np.ndarray) -> list[float]:
+def embed_face(
+    recognizer: cv2.FaceRecognizerSF, frame: np.ndarray, face: np.ndarray
+) -> list[float]:
     aligned = recognizer.alignCrop(frame, face)
     feature = recognizer.feature(aligned)
     embedding = feature.flatten().astype(float).tolist()

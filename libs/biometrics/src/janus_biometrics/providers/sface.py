@@ -24,6 +24,12 @@ _MODEL_ID = "sface-yunet-minifasnet-v1"
 _LIVENESS_PASS_THRESHOLD = 0.5
 
 
+def _softmax(logits: np.ndarray) -> np.ndarray:
+    shifted = logits - np.max(logits)  # numerically stable softmax
+    exp = np.exp(shifted)
+    return exp / exp.sum()
+
+
 class SFaceFaceVerifier(FaceVerifier):
     """Real local face verifier: YuNet (detection) + MiniFASNetV2/V1SE
     (liveness) + SFace (128-dim embedding), per requisitos 6, 7, 8.
@@ -53,7 +59,12 @@ class SFaceFaceVerifier(FaceVerifier):
         self._liveness_mode = liveness_mode
         self._detector: cv2.FaceDetectorYN | None = None
         self._recognizer: cv2.FaceRecognizerSF | None = None
-        self._liveness_session = None  # onnxruntime.InferenceSession, loaded lazily
+        # Liveness is an ensemble of two separate ONNX models (MiniFASNetV2 +
+        # MiniFASNetV1SE); minivision-ai never published a single combined
+        # file, so models.yaml has two entries and their softmax outputs are
+        # averaged before argmax (see NOTICE / models.yaml comments).
+        self._liveness_session_v2 = None  # onnxruntime.InferenceSession, loaded lazily
+        self._liveness_session_v1se = None
 
     def _ensure_loaded(self, image_shape: tuple[int, int]) -> None:
         if self._detector is None:
@@ -66,11 +77,13 @@ class SFaceFaceVerifier(FaceVerifier):
             sface_path = self._cache.resolve("sface")
             self._recognizer = pipeline.create_recognizer(str(sface_path))
 
-        if self._liveness_session is None:
+        if self._liveness_session_v2 is None or self._liveness_session_v1se is None:
             import onnxruntime  # local import: optional face extra
 
-            minifasnet_path = self._cache.resolve("minifasnet")
-            self._liveness_session = onnxruntime.InferenceSession(str(minifasnet_path))
+            v2_path = self._cache.resolve("minifasnet_v2")
+            v1se_path = self._cache.resolve("minifasnet_v1se")
+            self._liveness_session_v2 = onnxruntime.InferenceSession(str(v2_path))
+            self._liveness_session_v1se = onnxruntime.InferenceSession(str(v1se_path))
 
     async def verify(self, image: bytes, enrollment: Enrollment) -> BiometricResult:
         if enrollment.model_id != _MODEL_ID:
@@ -114,14 +127,25 @@ class SFaceFaceVerifier(FaceVerifier):
         resized = cv2.resize(crop, (80, 80)).astype(np.float32) / 255.0
         input_tensor = np.transpose(resized, (2, 0, 1))[np.newaxis, ...]
 
-        input_name = self._liveness_session.get_inputs()[0].name
-        outputs = self._liveness_session.run(None, {input_name: input_tensor})
-        if outputs[0].shape[-1] > 1:
-            live_score = float(outputs[0][0][1])
-        else:
-            live_score = float(outputs[0][0][0])
-
+        live_score = self._ensemble_live_score(input_tensor)
         return Liveness.PASS if live_score >= _LIVENESS_PASS_THRESHOLD else Liveness.FAIL
+
+    def _ensemble_live_score(self, input_tensor: np.ndarray) -> float:
+        """Averages the softmax outputs of both MiniFASNet models (V2 and
+        V1SE) before taking the live-class probability, matching the
+        upstream-recommended ensemble (see models.yaml comments / NOTICE).
+        Each session outputs raw logits over 3 classes
+        (live, print-attack, replay-attack); softmax is applied per-model
+        before averaging, not after, since averaging raw logits is not
+        equivalent to averaging probabilities.
+        """
+        probs = []
+        for session in (self._liveness_session_v2, self._liveness_session_v1se):
+            input_name = session.get_inputs()[0].name
+            logits = session.run(None, {input_name: input_tensor})[0][0]
+            probs.append(_softmax(logits))
+        averaged = (probs[0] + probs[1]) / 2.0
+        return float(averaged[1]) if averaged.shape[-1] > 1 else float(averaged[0])
 
     def _result(
         self, decision: Decision, liveness: Liveness, quality_ok: bool, reason: str
@@ -138,4 +162,5 @@ class SFaceFaceVerifier(FaceVerifier):
     async def close(self) -> None:
         self._detector = None
         self._recognizer = None
-        self._liveness_session = None
+        self._liveness_session_v2 = None
+        self._liveness_session_v1se = None

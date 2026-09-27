@@ -62,7 +62,7 @@ class BiometricService:
         face_liveness_mode: str = "required",
         attempt_limiter: AttemptLimiter | None = None,
         inference_concurrency: int = 1,
-        sensors: dict[str, "SensorSource"] | None = None,
+        sensors: dict[str, SensorSource] | None = None,
     ) -> None:
         self._registry = registry
         self._store = store
@@ -81,7 +81,7 @@ class BiometricService:
         # to on this particular machine. Empty by default: a service used
         # only with message-attached samples (verify_face/verify_voice
         # called directly, no local sensor) has no sensors to register.
-        self._sensors: dict[str, "SensorSource"] = dict(sensors or {})
+        self._sensors: dict[str, SensorSource] = dict(sensors or {})
 
     async def verify_face(
         self, image: bytes, profile: str = "owner", sender_id: str | None = None

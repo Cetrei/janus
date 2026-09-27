@@ -71,7 +71,7 @@ class SensorSource(ABC):
         ...
 
     @abstractmethod
-    def capture_audio(self, max_s: float) -> "PcmAudio":
+    def capture_audio(self, max_s: float) -> PcmAudio:
         """Captures up to `max_s` seconds of audio from a microphone
         sensor as PcmAudio (16-bit mono, 16 kHz -- base.PcmAudio's own
         contract), ready for BiometricService.verify_voice. Raises
@@ -131,7 +131,7 @@ class CameraSource(SensorSource):
             raise SensorUnavailable(self.id, "failed to encode captured frame")
         return encoded.tobytes()
 
-    def capture_audio(self, max_s: float) -> "PcmAudio":
+    def capture_audio(self, max_s: float) -> PcmAudio:
         raise NotImplementedError("CameraSource does not support audio capture")
 
 
@@ -155,7 +155,7 @@ class MicrophoneSource(SensorSource):
     def capture_frame(self) -> bytes:
         raise NotImplementedError("MicrophoneSource does not support frame capture")
 
-    def capture_audio(self, max_s: float) -> "PcmAudio":
+    def capture_audio(self, max_s: float) -> PcmAudio:
         # Local import: sounddevice/PortAudio is the optional `sensors`
         # extra, not a hard dependency of janus_biometrics -- importing
         # this module (or even constructing a MicrophoneSource) must not

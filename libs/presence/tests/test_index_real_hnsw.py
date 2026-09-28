@@ -25,10 +25,6 @@ class TestPresenceIndexAgainstRealHnsw:
 
         index = PresenceIndex()
         try:
-            # hnsw-c requires ids to be assigned sequentially starting at 0
-            # (hnswIndexInsert rejects `id != nodeCount`, surfaced here as
-            # HNSW_ERROR_INVALID_DIM despite the name): id=0 is the node
-            # closest to the query, id=1 is far.
             index.insert(0, [0.0] * EMBEDDING_DIM)
             index.insert(1, [10.0] * EMBEDDING_DIM)
             results = index.search([0.1] * EMBEDDING_DIM, k=1)
@@ -58,18 +54,38 @@ class TestPresenceIndexAgainstRealHnsw:
         finally:
             index.close()
 
-    def test_ids_must_be_sequential_from_zero(self):
-        # Documents a real constraint of the vendored hnsw-c
-        # (hnswIndexInsert), not a janus_presence choice: the first id in
-        # an empty index must be 0, not an arbitrary integer. A caller
-        # that skips ahead gets PresenceUnavailableError (index.py maps
-        # every non-OK HnswStatus to it), not a crash.
+    def test_ids_can_arrive_in_any_order_with_gaps(self):
+        # hnsw-c itself only accepts id == nodeCount on insert, but
+        # PresenceIndex keeps durable ids apart from node positions, so
+        # the startup rebuild can feed it ids in any order and with gaps
+        # left by forgotten people. Only a live duplicate is refused.
         from janus_presence.errors import PresenceUnavailableError
         from janus_presence.index import EMBEDDING_DIM, PresenceIndex
 
         index = PresenceIndex()
         try:
+            index.insert(5, [5.0] * EMBEDDING_DIM)
+            index.insert(3, [3.0] * EMBEDDING_DIM)
+            index.insert(9, [9.0] * EMBEDDING_DIM)
+
+            nearest = index.search([3.1] * EMBEDDING_DIM, k=1)
+            assert nearest[0][0] == 3
+
             with pytest.raises(PresenceUnavailableError):
-                index.insert(1, [0.0] * EMBEDDING_DIM)
+                index.insert(5, [0.0] * EMBEDDING_DIM)
+        finally:
+            index.close()
+
+    def test_removed_id_can_be_inserted_again(self):
+        from janus_presence.index import EMBEDDING_DIM, PresenceIndex
+
+        index = PresenceIndex()
+        try:
+            index.insert(2, [1.0] * EMBEDDING_DIM)
+            index.remove(2)
+            index.insert(2, [8.0] * EMBEDDING_DIM)
+
+            nearest = index.search([8.0] * EMBEDDING_DIM, k=1)
+            assert nearest[0][0] == 2
         finally:
             index.close()

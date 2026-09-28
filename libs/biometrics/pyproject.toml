@@ -27,6 +27,26 @@ face = ["opencv-python-headless"]
 # manual_camera_check.py necesita `face-gui`.
 face-gui = ["opencv-python"]
 sensors = ["sounddevice"]
+# Resolves spec-18's Open Question ("Frontend de caracteristicas de voz sin
+# PyTorch: evaluar speakeronnx ... o kaldi-native-fbank"). sherpa-onnx
+# (k2-fsa/Next-gen Kaldi, Apache-2.0) chosen over speakeronnx (single-
+# maintainer 0.0.x alpha, unsuitable for a service meant to run
+# indefinitely on a Raspberry Pi) and over kaldi-native-fbank alone
+# (would only solve the fbank frontend, leaving ONNX inference unresolved).
+# sherpa-onnx solves both in one mature package, ships real wheels for
+# manylinux2014_x86_64, manylinux2014_aarch64 (Raspberry Pi) and Windows,
+# and distributes the wespeaker ResNet34 model spec-18 already chose.
+# sherpa-onnx-core is listed explicitly on purpose. sherpa-onnx's own wheels
+# declare `Requires-Dist: sherpa-onnx-core==<same version>`, and that package
+# is what ships libonnxruntime.so (the extension's RPATH looks for it in
+# sherpa_onnx/lib/). uv's universal lock recorded sherpa-onnx with NO
+# dependencies (it read the metadata of one distribution that does not
+# declare core), so `uv sync` installed sherpa-onnx without it and
+# `import sherpa_onnx` failed with "libonnxruntime.so: cannot open shared
+# object file". Keep the two versions in lockstep: core is py3-none and
+# built per platform (x86_64, aarch64, win_amd64, macosx) for the same
+# release, and a mismatched pair fails at load time, not install time.
+voice = ["sherpa-onnx==1.13.8", "sherpa-onnx-core==1.13.8"]
 
 [dependency-groups]
 dev = ["pytest", "pytest-asyncio", "ruff"]

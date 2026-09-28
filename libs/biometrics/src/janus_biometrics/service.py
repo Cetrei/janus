@@ -13,7 +13,7 @@ from janus_biometrics.base import (
     PcmAudio,
     SpeakerVerifier,
 )
-from janus_biometrics.errors import SensorUnavailable
+from janus_biometrics.errors import BiometricsError, ModelMismatch, SensorUnavailable
 from janus_biometrics.policy import AttemptLimiter, Thresholds
 from janus_biometrics.registry import ProviderRegistry
 from janus_biometrics.store import EncryptedTemplateStore
@@ -163,14 +163,24 @@ class BiometricService:
         if enrollment is None:
             return self._inconclusive(kind, _NOT_ENROLLED)
 
+        # Resolving AND performing share one try: providers load their
+        # models lazily inside verify() (SFaceFaceVerifier._ensure_loaded,
+        # WeSpeakerProvider._ensure_loaded), so a missing extra, an
+        # unreachable download or a hash mismatch surfaces there, not at
+        # resolve time. All of these fail closed (INCONCLUSIVE), never
+        # open. ModelMismatch is deliberately NOT swallowed: it is not an
+        # availability failure but an actionable state (re-enroll,
+        # requisito 18), and hiding it behind model_unavailable would send
+        # the operator hunting for a download problem that does not exist.
         try:
             verifier = resolve_verifier()
-        except (KeyError, ImportError) as exc:
+            async with self._semaphore:
+                result = await perform(verifier, enrollment)
+        except ModelMismatch:
+            raise
+        except (KeyError, ImportError, BiometricsError) as exc:
             _log.warning("biometric provider unavailable for kind=%s: %s", kind, exc)
             return self._inconclusive(kind, _MODEL_UNAVAILABLE)
-
-        async with self._semaphore:
-            result = await perform(verifier, enrollment)
 
         if sender_id is not None:
             if result.decision == Decision.HIGH:

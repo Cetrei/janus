@@ -1,0 +1,49 @@
+Janus -- Third-Party Notices
+
+This project bundles/downloads no third-party source code directly, but
+janus_biometrics (libs/biometrics) depends on third-party ONNX model
+weights and libraries at runtime. Each is used under its own license,
+noted below. See libs/biometrics/src/janus_biometrics/models.yaml for
+the exact source URL and verified sha256 of each weight file.
+
+--------------------------------------------------------------------------
+YuNet (face detection) and SFace (face recognition)
+Source: opencv/opencv_zoo
+License: MIT (YuNet), Apache-2.0 (SFace)
+--------------------------------------------------------------------------
+
+--------------------------------------------------------------------------
+SCRFD (face detection, optional local:scrfd variant)
+Source: deepinsight/insightface, antelopev2 model pack
+License: "Available for non-commercial research purposes only"
+         (InsightFace's own README) -- NOT MIT/Apache-2.0. This project
+         uses it only under a personal/portfolio, non-commercial scope
+         (see docs/specs/spec-18-biometrics.md, "Actualizacion
+         2026-09-26"). Anyone reusing this project for a different
+         purpose must make their own licensing determination before
+         enabling local:scrfd.
+--------------------------------------------------------------------------
+
+--------------------------------------------------------------------------
+MiniFASNetV2 / MiniFASNetV1SE (liveness / anti-spoofing)
+Source: minivision-ai/Silent-Face-Anti-Spoofing (weights),
+        re-exported to ONNX by leandroveronezi/go-onnxface (code only,
+        does not claim authorship of the weights)
+License: Apache-2.0, inherited from minivision-ai
+--------------------------------------------------------------------------
+
+--------------------------------------------------------------------------
+WeSpeaker ResNet34 (speaker verification / voice embedding)
+Source: k2-fsa/sherpa-onnx release "speaker-recongition-models"
+        (wespeaker_en_voxceleb_resnet34.onnx)
+Underlying model/weights: WeSpeaker project, trained on VoxCeleb
+License: CC BY 4.0 (VoxCeleb) -- requires attribution.
+Attribution: VoxCeleb dataset, Nagrani et al., University of Oxford.
+             WeSpeaker: wenet-e2e/wespeaker.
+--------------------------------------------------------------------------
+
+--------------------------------------------------------------------------
+sherpa-onnx (fbank feature extraction + ONNX inference runtime for voice)
+Source: k2-fsa/sherpa-onnx (Next-gen Kaldi)
+License: Apache-2.0
+--------------------------------------------------------------------------

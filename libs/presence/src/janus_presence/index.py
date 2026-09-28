@@ -29,10 +29,23 @@ _STATUS_NAMES = {
 
 class PresenceIndex:
     """Wraps the vendored hnsw-c library (requisito 4). `dim=128` to match
-    the SFace embeddings janus_biometrics produces. The HNSW id space is a
-    presence-internal integer, mapped 1:1 to person_id by PresenceStore
-    (requisito 6); this class only ever deals in those integers, never in
-    person_id strings.
+    the SFace embeddings janus_biometrics produces.
+
+    Two id spaces live here, on purpose:
+
+    * the *durable id* (`hnsw_id`) is what the rest of presence uses: it is
+      the value stored in person_embeddings and in the encrypted sample
+      file names, and it never changes for the life of an embedding;
+    * the *node position* is what hnsw-c calls `id`. The C library only
+      accepts `id == nodeCount` on insert and never compacts on remove
+      (hnswIndexInsert / hnswIndexRemove), so a position is an internal
+      detail of one in-memory index instance.
+
+    Keeping them apart is what makes the startup rebuild safe: samples are
+    reloaded in whatever order the filesystem lists them, and ids left
+    behind by forgotten people leave gaps, neither of which the C library
+    could take if durable ids were passed straight through. Positions are
+    handed out sequentially by this class and translated in both directions.
 
     hnsw-c has no save/load extension yet (SPEC.md Open Questions), so this
     index only ever lives in memory: PresenceService is responsible for
@@ -72,23 +85,57 @@ class PresenceIndex:
                 "hnsw-c", "hnswIndexCreate returned NULL (out of memory)"
             )
         self._index = index
+        # Nodes ever inserted into the C index, tombstones included: the
+        # next free position, since hnsw-c never reuses or compacts them.
+        self._node_count = 0
+        self._position_by_id: dict[int, int] = {}
+        self._id_by_position: dict[int, int] = {}
 
     def insert(self, hnsw_id: int, embedding: list[float]) -> None:
+        """Adds an embedding under a durable id. Any int is accepted, in any
+        order; only a live duplicate is rejected."""
         self._check_dim(embedding)
+        if hnsw_id in self._position_by_id:
+            raise PresenceUnavailableError(
+                "hnsw-c",
+                f"insert(id={hnsw_id}) failed: {_STATUS_NAMES[4]}",
+            )
+        position = self._node_count
         values = ffi.new("float[]", embedding)
-        status = lib.hnswIndexInsert(self._index, hnsw_id, values)
+        status = lib.hnswIndexInsert(self._index, position, values)
         self._raise_on_error(status, f"insert(id={hnsw_id})")
+        # Bookkeeping only after the C call succeeded: a failed insert does
+        # not consume a position (hnswIndexInsert bumps nodeCount last).
+        self._node_count += 1
+        self._position_by_id[hnsw_id] = position
+        self._id_by_position[position] = hnsw_id
 
     def remove(self, hnsw_id: int) -> None:
-        status = lib.hnswIndexRemove(self._index, hnsw_id)
+        position = self._position_by_id.get(hnsw_id)
+        if position is None:
+            raise PresenceUnavailableError(
+                "hnsw-c",
+                f"remove(id={hnsw_id}) failed: {_STATUS_NAMES[3]}",
+            )
+        status = lib.hnswIndexRemove(self._index, position)
         self._raise_on_error(status, f"remove(id={hnsw_id})")
+        del self._position_by_id[hnsw_id]
+        del self._id_by_position[position]
 
     def search(self, embedding: list[float], k: int = 5) -> list[tuple[int, float]]:
+        """Nearest embeddings as (durable id, squared distance). Positions
+        with no live durable id (should not happen) are dropped rather than
+        leaked to the caller."""
         self._check_dim(embedding)
         query = ffi.new("float[]", embedding)
         result = lib.hnswIndexSearch(self._index, query, k)
         try:
-            return [(result.ids[i], result.distances[i]) for i in range(result.count)]
+            pairs: list[tuple[int, float]] = []
+            for slot in range(result.count):
+                hnsw_id = self._id_by_position.get(result.ids[slot])
+                if hnsw_id is not None:
+                    pairs.append((hnsw_id, result.distances[slot]))
+            return pairs
         finally:
             lib.hnswSearchResultDestroy(result)
 
@@ -96,6 +143,8 @@ class PresenceIndex:
         if getattr(self, "_index", None) is not None:
             lib.hnswIndexDestroy(self._index)
             self._index = None
+            self._position_by_id.clear()
+            self._id_by_position.clear()
 
     def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
         self.close()

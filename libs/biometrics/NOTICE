@@ -54,6 +54,15 @@ Section 4(d) of the Apache License, Version 2.0.
              are distributed under Creative Commons Attribution 4.0
              International (CC BY 4.0), which requires attribution.
              https://creativecommons.org/licenses/by/4.0/
+   Runtime: The ONNX conversion of this model and the inference engine
+             that runs it (fbank frontend + ONNX inference, resolving
+             spec-18's fbank-frontend Open Question) are provided by
+             sherpa-onnx (k2-fsa / Next-gen Kaldi project), used via the
+             `voice` optional dependency (pyproject.toml).
+             https://github.com/k2-fsa/sherpa-onnx
+   License: Apache License, Version 2.0 (sherpa-onnx's own code; the
+             model weights it distributes carry their original license,
+             CC BY 4.0 as noted above)
 
 --------------------------------------------------------------------------
 

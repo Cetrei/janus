@@ -1,7 +1,7 @@
 # Feature Spec: libs/presence/ (identificación ambiental 1:N, "quién entró a la casa")
 
 > **Status**: Ready for implementation
-> **Last updated**: 2026-09-24
+> **Last updated**: 2026-09-27 (ampliación a servicio de percepción de personas, ver la sección "Ampliación 2026-09-27" antes del Handoff Note)
 > **Vive fuera de `docs/specs/`**: esta es una feature nueva, autocontenida, con su propia spec dentro de su propio directorio (`libs/presence/SPEC.md`), no un spec numerado del índice de Janus. No modifica `docs/specs/spec-18-biometrics.md`, que permanece cerrada tal cual. `libs/biometrics/` gana un consumidor externo (esta librería), nada más.
 > **Orden de implementación relativo**: depende de que `libs/biometrics/` (spec-18) exista como paquete instalable (para reusar detección + embedding de cara), y del repositorio externo `hnsw-c` (ver `vendor/hnsw-c/`) compilado. No depende de nada del núcleo de Janus (`libs/persistence`, `libs/adapters`, `libs/capabilities`, `apps/*`): es un spoke, se integra a Janus por fuera, no al revés.
 
@@ -13,7 +13,7 @@ Dar a Janus percepción ambiental de personas: identificar quién aparece frente
 
 Esto es identificación 1:N (¿quién de los que conozco es esta persona, o es alguien nuevo?), un problema explícitamente distinto y fuera del alcance de `libs/biometrics` (verificación 1:1 del dueño, spec-18, decisión técnica "Verificación uno a uno del dueño, no identificación"). `presence` no reemplaza ni extiende esa decisión: la respeta separándose de ella.
 
-**`presence` no asigna rol.** Emite quién es (o que es un desconocido) con una confianza; qué significa ese quién para el sistema (dueño, familiar, visita autorizada a hacer tal cosa) es responsabilidad de quien consume el evento (Janus, o config). Esto es intencional: mezclar "reconocer" con "autorizar" reintroduciría exactamente el tipo de acoplamiento que `request_approval` (spec-04) ya resuelve en el resto de Janus.
+**`presence` no autoriza nada; desde la ampliación 2026-09-27 sí guarda una etiqueta de rol** (requisito 25). Emite quién es (o que es un desconocido) con una confianza, más la etiqueta de rol que el dueño le asignó; qué significa ese quién y esa etiqueta para el sistema (qué puede hacer esa persona, cómo se le responde) es responsabilidad de quien consume el evento (Janus, o config). Esto es intencional: mezclar "reconocer" con "autorizar" reintroduciría exactamente el tipo de acoplamiento que `request_approval` (spec-04) ya resuelve en el resto de Janus.
 
 ---
 
@@ -246,6 +246,123 @@ Errores: `PresenceError` (base), `PresenceUnavailableError` (índice o cámara n
 - [ ] Formato exacto de `vendor/hnsw-c/` (submodule con build local en cada máquina, vs. copiar solo binarios precompilados por plataforma): a decidir al implementar, según qué tan cómodo sea compilar `hnsw-c` en el Raspberry Pi objetivo.
 
 ---
+
+## Ampliación 2026-09-27: servicio de percepción de personas
+
+> **Estado**: decidida con el usuario en sesión de diseño (Architect, 2026-09-27), implementable por fases (ver Plan de fases). Los requisitos 1 a 20 siguen vigentes salvo donde esta sección los corrige. Nota: la sección "Relación con `libs/biometrics` y con `hnsw-c`" y el árbol de directorios de arriba describen `hnsw-c` como submódulo, pero el código real vendoriza `vendor/hnsw/` (ver `AGENT.md` raíz); esta ampliación no lo toca.
+
+### Objetivo ampliado
+
+`presence` pasa a ser el servicio de percepción de personas de Janus: N cámaras y N micrófonos configurables, identificación por cara y por voz, un ciclo de vida de identidad con confirmación del dueño, clips por evento o manuales con render aparte (zoom sobre la cara), y una superficie de herramientas para que Janus decida cómo actuar. Presence identifica y expone datos con su confianza; qué hace Janus con ellos (trato distinto por persona, respuestas, permisos) es política de Janus por config, no de esta librería.
+
+Motivaciones concretas del usuario: (a) llegar a casa y que Janus muestre el clip de alguien que entró y habló en su cuarto, alguien desconocido al que el dueño le explica quién es; (b) que Janus pueda distinguir a quien le habla por la voz sola cuando no lo ve ("hola Janus"); (c) que la identidad se refuerce con el tiempo y con la confirmación del dueño, no por adivinanza; (d) darle a Janus todas las herramientas de percepción de personas sin decidir por él cómo usarlas.
+
+### Correcciones al spec original
+
+1. Objective, párrafo "no asigna rol": reemplazado por el requisito 25 (rol como etiqueta, sin autorización).
+2. Requisito 11 (`process_frame` como único punto de entrada): se separa en `identify` (solo lectura) y `observe` (con efectos), requisito 22. `process_frame` se conserva como alias de `observe` sobre una cámara configurada.
+3. Requisito 4 (`dim=128` fijo): pasa a un índice por modalidad, requisito 23.
+4. Requisito 6 (esquema inline y sin migraciones): pasa a migraciones versionadas, requisito 38.
+5. Requisitos 12 y 14 (snapshot y clip): hoy solo devuelven una ruta y no escriben ningún archivo. Los requisitos 31 y 38 los vuelven reales (JPEG cifrado, video escrito), y sus tests deben afirmar que el archivo existe.
+
+### Fuentes (cámaras y micrófonos)
+
+21. `SourceConfig { source_id, kind: camera|microphone, source: local|rtsp|mcp, device, label, enabled, sample_fps? }`. Un `SourceRegistry` carga N fuentes de config. Selección en dos niveles: qué fuentes están activas en el monitor continuo (`enabled`), y qué fuente usa una consulta puntual (`source_id` en `identify`). Cada cámara activa se procesa con su propia cadencia y umbrales de calidad, porque una laptop a 640x360 y una cámara de jardín no se comportan igual. Las fuentes `mcp` (spec-20, `iot.camera.*`) solo garantizan muestreo por instantáneas: no permiten buffer previo ni clips continuos, solo desde el instante del disparo. `presence` recibe `FrameSource` y `AudioSource` inyectados y nunca importa `libs/iot` (requisito 10). Las fuentes locales reusan `janus_biometrics.camera.Camera` (captura persistente) y `MicrophoneSource`.
+
+### Identificar contra observar
+
+22. `identify(sample) -> IdentifyResult`: solo lectura. No crea personas, no graba, no toca plantillas, no emite eventos. `sample` es una imagen, un audio, ambos, o un `source_id` capturado en el momento (cámara y micrófono seleccionables). `IdentifyResult { candidates: list[Candidate { person_id, label, role, state, confidence }], modalities: list[str], conflict: bool }`. `observe(source_id, frame)` es la ruta continua con efectos (visitas, desconocido nuevo, evidencia pendiente, clip). Ambas comparten el mismo motor de decisión (`Matcher`); solo `observe` escribe. Sin coincidencia, `identify` devuelve una lista vacía: no inventa un desconocido.
+
+### Índices por modalidad y fusión
+
+23. Un `PresenceIndex` por modalidad: cara con `dim=128` (SFace) y voz con `dim=256` (WeSpeaker ResNet34). Cada modalidad tiene su propio `match_threshold` (sin default de fábrica, mismo criterio del requisito 5). `person_embeddings` gana `modality`. La voz exige una función de bajo nivel en biometrics (spec-18, requisito 8ter).
+24. Fusión determinista de evidencia: cara y voz que apuntan al mismo `person_id` combinan confianza; si apuntan a personas distintas, el resultado sale con `conflict = true` y no elige; con una sola modalidad, vale esa. El vínculo cara y voz es por identidad (mismo `person_id`), nunca por coincidencia temporal aplicada de forma automática: una coincidencia (una sola cara en cuadro mientras se habla) puede generar una sugerencia, que solo el dueño confirma. Distinguir quién habla entre varias caras queda fuera de v1. Sin antifalsificación de voz (spec-18, requisito 10), una grabación puede pasar; `presence` no autoriza y el consumidor no debe tratar la voz sola como prueba.
+
+### Roles
+
+25. `PersonRecord.role: str | None` es una etiqueta de un vocabulario declarado en config (`presence.roles`, por ejemplo `owner`, `family`, `guest`, `staff`). Presence la incluye en eventos y resultados y la usa solo en sus propias políticas de grabación (`clip_policy` por rol, requisito 33). El rol nunca es un permiso: la autorización sigue en Janus (`request_approval`, verificación de identidad de spec-11). Un falso positivo de cara no puede abrir una puerta.
+
+### Ciclo de vida de identidad y evidencia
+
+26. `IdentityState { UNKNOWN, PROVISIONAL, ESTABLISHED }`. `known` (requisito 1) pasa a derivarse: `known = state != UNKNOWN`. UNKNOWN pasa a PROVISIONAL cuando el dueño da un nombre (`name_person`). PROVISIONAL pasa a ESTABLISHED con `established_min_samples` (default 5) muestras confirmadas y al menos una confirmación explícita del dueño. Mientras no sea ESTABLISHED, la confianza emitida se topa en `provisional_confidence_cap` (default 0.7). Una sola locución corta es evidencia débil y no puede volver ESTABLISHED a una identidad.
+27. Toda aparición o locución sin el dueño presente se guarda como `Evidence` con `status = PENDING`, ligada a una identidad UNKNOWN o a una hipótesis (`hypothesis_person_id`, `hypothesis_confidence`). PENDING no modifica ninguna plantilla ni el índice de identidades establecidas. Solo la evidencia CONFIRMED refuerza: `confirm_evidence` ("ese era X"), `reject_evidence` (con `actual_person_id` opcional) o `discard_evidence`. Al rechazar una hipótesis se registra un contraejemplo en `person_exclusions`, para que el sistema no proponga la misma confusión.
+28. El refuerzo automático sin el dueño está desactivado por defecto (`auto_reinforce_dual_modality = false`); si se activa, exige cara y voz de la misma persona a la vez, ambas sobre umbral alto. Tope de muestras por persona (`max_samples_per_person`, default 20) con reemplazo de las más redundantes. Todo refuerzo registra su `origin` (`owner_confirmed`, `dual_modality`, `enroll`, `pretrain`) y es reversible (`retract_evidence`).
+29. `pending_review()` lista la evidencia PENDING agrupada por visita, para presentársela al dueño. Presentar una visita fija `presented_at`.
+
+### Visitas
+
+30. `Visit { visit_id, person_id, source_id, started_at, last_seen_at, ended_at?, clip_ref? }`. Una visita se abre en el primer avistamiento de una persona en una fuente y se cierra tras `visit_gap_s` (default 30) sin verla. Hacia el consumidor salen eventos `visit_started` y `visit_ended` (con permanencia), no uno por frame. `person_seen` (requisito 18) se conserva por compatibilidad.
+
+### Clips y render
+
+31. Grabación cruda: buffer previo en memoria (`clip_preroll_s`, default 5) más cola posterior (`clip_duration_s`), un solo clip por cámara a la vez (un disparo nuevo extiende el clip en curso) y un hilo escritor separado del de detección. Junto a cada clip, un archivo de pistas `.tracks.jsonl` (instante, bbox, `person_id`). Audio: no se graba (`clip_audio = false` por defecto); el audio se usa de forma transitoria para identificar y se descarta. Códec: decisión abierta hasta medir (`mp4v` frente a H.264 por ffmpeg lanzado con `janus_platform.spawn`).
+32. `render_clip(clip_ref, style)` produce un archivo aparte con zoom sobre la cara y panel de nombre, rol y hora, a partir del crudo y las pistas, al cerrar la visita o bajo demanda (reusa `janus_biometrics.overlay`). Se renderiza con la identidad vigente en ese momento, por lo que nombrar después actualiza el resultado. Crudo y render tienen retención independiente.
+33. `clip_policy` por rol (`always | first_seen | never`). El disparo `first_seen` sigue siendo incondicional para UNKNOWN. Las capas de decision model y de API manual (requisitos 15 y 16) no cambian.
+
+### Olvido y pre entrenamiento
+
+34. `forget_after_days` (default 30, configurable) para identidades UNKNOWN y PROVISIONAL nunca confirmadas. El reloj cuenta desde el máximo entre la última vez vista y la última vez presentada al dueño (`presented_at`), para no expirar algo que el dueño aún no vio. Al olvidar se borran embeddings, muestras, snapshots, clips crudos y renders con borrado seguro. Idempotente. ESTABLISHED queda fuera. Jobs periódicos: olvido, vencimiento de snapshot (requisito 12) y retención de clips (requisito 17).
+35. `pretrain(person_id)`: sesión guiada de enrolamiento intensivo por modalidad. Pide condiciones variadas (distancia, ángulo, luz, ruido, tono de voz), mide la variabilidad interna de las muestras y reporta cuándo dejaron de aportar información nueva; reusa la lógica de `calibrate` de biometrics. Las plantillas de presence (identificación) y de biometrics (verificación 1:1) siguen separadas y con claves distintas, aunque una misma sesión pueda capturar para ambas. Más muestras reducen el falso rechazo del dueño, no la confusión con una voz muy parecida.
+
+### Herramientas expuestas
+
+36. Lectura, sin aprobación: quién está en cámara ahora, `identify`, listar y buscar personas (nombre, rol, estado), visitas recientes, `pending_review`, obtener clip o render, salud por fuente. Mutación de identidad, con `request_approval` y verificación de identidad del dueño: `name_person`, `set_role`, `merge_persons`, `confirm_evidence`, `reject_evidence`, `retract_evidence`, `forget_person`, `pretrain`. Acción física: `record_clip`, con política de aprobación configurable. Toda respuesta trae confianza, modalidades usadas y `conflict`, sin conclusiones cocinadas.
+37. `merge_persons(source_id, target_id)`: obligatorio en v1. Conserva el `person_id` de destino, reasigna embeddings, visitas, evidencia y sightings, y borra el origen.
+
+### Persistencia y runner
+
+38. `presence.db` con migraciones versionadas por `PRAGMA user_version` (archivos `migrations/NNNN_*.sql` aplicados en orden en runtime), `journal_mode = WAL` y `foreign_keys = ON`. Un solo proceso escritor: el servicio es el único que muta y las consultas de solo lectura no bloquean al monitor. Tablas nuevas: `visits`, `evidence`, `person_exclusions`, `sources`; `persons` gana `role`, `state`, `presented_at`; `person_embeddings` gana `modality`. Snapshots reales, cifrados en reposo, con borrado seguro al nombrar y al vencer.
+39. Runner autónomo (`python -m janus_presence run`): config declarativa, log de eventos JSONL, salud y reconexión con backoff por fuente, y revisión y nombrado local (página con foto) mientras no exista Janus. El adaptador de Janus (spoke `presence`, specs 04, 09, 11 y 14) es posterior y delgado: mapea las herramientas del requisito 36 a capacidades y reenvía eventos por `CoreGateway.ingest`; nombrar por chat hereda la verificación de identidad de spec-11.
+
+### Decisiones técnicas de la ampliación
+
+* **Rol como etiqueta, sin autorización.** Reconocer y autorizar siguen separados; con la spec 20 (cerraduras) un falso positivo de cara sería un riesgo físico. Descartado: rol como permiso.
+* **`identify` separado de `observe`.** Preguntar "quién es" no debe crear identidades ni grabar. Descartado: un único `process_frame` con banderas.
+* **Evidencia pendiente y refuerzo solo confirmado.** Nada entra a una plantilla por adivinanza, lo que cierra el vector de envenenamiento (un invitado de voz parecida corriendo el centroide del dueño). Descartado: aprendizaje automático de muestras por umbral.
+* **Render separado de la grabación.** La identidad puede llegar tarde, el render cuesta CPU y el crudo se puede renderizar de nuevo con otro estilo. Costo aceptado: dos archivos con retención independiente.
+* **Voz como modalidad independiente, sin crear desconocidos desde la ruta de consulta.** Crear identidades desde cualquier voz que pase frente al micrófono llenaría la base de ruido.
+* **Olvido por defecto a 30 días.** Minimiza biometría de terceros retenida y evita ruido; el dueño puede subirlo o desactivarlo.
+
+### Plan de fases
+
+* F0: biometrics, `FaceEmbedder` reutilizable (spec-18, requisito 8ter a).
+* F1: presence núcleo: migraciones, estados y roles, visitas, `identify` y `observe`, evidencia, merge y olvido.
+* F2: clips reales (buffer previo, grabador, pistas), snapshot cifrado y render.
+* F3: voz (spec-18, requisito 8ter b) e índice de voz.
+* F4: runner autónomo, config, salud, log de eventos y revisión local.
+* F5: adaptador de Janus, bloqueado hasta que exista el núcleo (specs 04, 09, 11, 14).
+
+### Casos borde de la ampliación
+
+| Caso | Cómo se maneja |
+|---|---|
+| La misma persona partida en dos UNKNOWN | `merge_persons` (requisito 37); no hay fusión automática. |
+| El dueño rechaza "ese era X" | Contraejemplo en `person_exclusions`; no se vuelve a proponer X para esa evidencia. |
+| Fuente `mcp` sin stream | Solo muestreo y clips desde el disparo; sin buffer previo. |
+| Evidencia PENDING que vence sin que el dueño la vea | El reloj de olvido cuenta desde `presented_at`; no expira sin haberse presentado. |
+| Cara y voz apuntan a personas distintas | `conflict = true`; ningún candidato se elige por el consumidor. |
+| Caída del proceso a mitad de un clip | Clip parcial marcado como tal; el índice y la base no dependen de él. |
+| Migración interrumpida | Cada migración corre en una transacción; `user_version` solo avanza si confirma. |
+
+### Tests de la ampliación
+
+Unitarios: migraciones sobre una base vacía y sobre una creada por la versión anterior; transiciones de estado y tope de confianza; visitas con reloj falso (apertura, extensión, cierre por `visit_gap_s`); `identify` sin efectos secundarios (la base y el índice no cambian); evidencia PENDING sin efecto en plantillas; olvido idempotente y respeto de `presented_at`; fusión determinista con conflicto. Integración: monitor con cámara falsa guionada y reloj falso; clip real que deja un archivo con tamaño mayor que cero y retención que borra el más viejo; snapshot cifrado que no contiene bytes JPEG en claro. Todo con `FrameSource` y `AudioSource` falsos; las fixtures reales de cara y voz van en un directorio ignorado por git y se saltan si faltan.
+
+### Checklist de seguridad de la ampliación
+
+- [ ] Cola de pendientes y evidencia sin confirmar tratadas como biometría sensible de terceros (cifradas, borrado seguro)
+- [ ] Nombrar, fusionar, confirmar y olvidar exigen `request_approval` y verificación de identidad del dueño
+- [ ] Ninguna plantilla establecida se modifica sin origen registrado y sin posibilidad de retractar
+- [ ] Interfaz de control del runner autenticada (loopback, token en archivo 0600)
+- [ ] Audio no persistido por defecto
+- [ ] Rol nunca consumido como permiso dentro de esta librería
+
+### Preguntas abiertas de la ampliación
+
+- [ ] Códec de clips: `mp4v` frente a H.264 por ffmpeg; medir en el hardware real.
+- [ ] Valores por defecto de `provisional_confidence_cap`, `established_min_samples` y `visit_gap_s`: partida razonable, se ajustan con datos reales.
+- [ ] Cifrado en reposo de los clips crudos (hoy solo permisos 0600 y aviso en el README; el spec original solo exige cifrar snapshots).
+- [ ] Cadencia de muestreo (`sample_fps`) por tipo de fuente.
 
 ## Handoff Note
 Revisar esta spec y `hnsw-c/SPEC.md` antes de empezar (este documento depende de decisiones tomadas ahí, en particular la firma de `hnsw_index_search`/`insert`/`remove`). Crear un checklist desde los requisitos funcionales y marcarlo al avanzar. Levantar dudas antes de codificar, no durante. Orden sugerido: `store.py` y `models.py` primero (sin dependencias externas, fáciles de testear con datos falsos), luego `index.py` contra `hnsw-c` ya compilado, luego `frame_source.py` con `LocalCameraSource`, y `service.py` al final integrando todo. `decision_gate.py` y `McpCameraSource` son extensiones opcionales, se implementan después de que el flujo determinista completo funcione de punta a punta.

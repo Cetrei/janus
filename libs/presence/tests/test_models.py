@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from janus_presence.models import CameraConfig, PersonRecord, PresenceConfig
+from janus_presence.models import CameraConfig, IdentityState, PersonRecord, PresenceConfig
 
 
 def _now() -> datetime:
@@ -12,13 +12,14 @@ def _now() -> datetime:
 
 
 class TestPersonRecordKnownInvariant:
-    """requisito 1, 3: known=True must always carry a label."""
+    """requisito 1, 3, 26: state past UNKNOWN must always carry a label;
+    known is derived from state."""
 
-    def test_known_without_label_raises(self):
+    def test_established_without_label_raises(self):
         with pytest.raises(ValueError):
             PersonRecord(
                 person_id="p1",
-                known=True,
+                state=IdentityState.ESTABLISHED,
                 embedding_ids=[1],
                 first_seen_at=_now(),
                 last_seen_at=_now(),
@@ -28,7 +29,7 @@ class TestPersonRecordKnownInvariant:
     def test_unknown_without_label_is_valid(self):
         person = PersonRecord(
             person_id="p1",
-            known=False,
+            state=IdentityState.UNKNOWN,
             embedding_ids=[1],
             first_seen_at=_now(),
             last_seen_at=_now(),
@@ -37,10 +38,21 @@ class TestPersonRecordKnownInvariant:
         assert person.known is False
         assert person.label is None
 
-    def test_known_with_label_is_valid(self):
+    def test_established_with_label_is_valid(self):
         person = PersonRecord(
             person_id="p1",
-            known=True,
+            state=IdentityState.ESTABLISHED,
+            embedding_ids=[1],
+            first_seen_at=_now(),
+            last_seen_at=_now(),
+            label="Joanfer",
+        )
+        assert person.known is True
+
+    def test_provisional_with_label_is_known(self):
+        person = PersonRecord(
+            person_id="p1",
+            state=IdentityState.PROVISIONAL,
             embedding_ids=[1],
             first_seen_at=_now(),
             last_seen_at=_now(),

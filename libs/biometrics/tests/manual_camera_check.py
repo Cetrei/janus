@@ -39,10 +39,29 @@ under tests/.manual_camera_check/owner.json (NOT the real encrypted store
 in store.py: this tool is for testing the model chain in isolation, not
 for producing a real Janus enrollment).
 
-There is no microphone / voice counterpart yet: no speaker provider
-(WeSpeaker or otherwise) is implemented in janus_biometrics yet (see
-registry.py, only "local:sface" and "null" are registered), so there is
-nothing real for a microphone script to call into.
+Voice subcommands (`enroll-voice`/`verify-voice`) exercise the real
+MicrophoneSource (sensors.py) + WeSpeakerVerifier/SherpaWeSpeakerExtractor
+(providers/speaker_wespeaker.py) chain, the voice counterpart of
+enroll/verify above. Like those, this stores a plaintext test enrollment
+under tests/.manual_camera_check/owner_voice.json, NOT the real encrypted
+store. Unlike face's live camera preview, there is no equivalent live
+audio-level meter here (out of scope for this manual tool): each capture
+is a fixed-duration blocking recording with a countdown printed to the
+console, immediately followed by the enroll/verify result -- if a capture
+comes back too short or silent, the fix is to run the subcommand again
+and speak sooner/louder, not a feature this script needs to add.
+
+Requires the `sensors` extra (sounddevice/PortAudio) AND the `voice`
+extra (sherpa-onnx) from libs/biometrics/:
+
+    uv sync --extra sensors --extra voice
+
+and a real `wespeaker` entry in models.yaml (see models.yaml's own
+comments and providers/speaker_wespeaker.py's module docstring for the
+one-time manual step of downloading the .onnx weights and filling in a
+verified sha256 -- this script does not work around that, it surfaces
+the same BiometricsError _make_voice_extractor's equivalent in __main__.py
+raises if that entry is still the unfilled template).
 """
 
 from __future__ import annotations
@@ -77,13 +96,38 @@ from janus_biometrics.camera import (  # noqa: E402
     list_cameras,
     print_camera_list,
 )
+from janus_biometrics.errors import (  # noqa: E402
+    BiometricsError,
+    EnrollmentError,
+    SensorUnavailable,
+)
+from janus_biometrics.enrollment import enroll_voice  # noqa: E402
 from janus_biometrics.models import ModelCache  # noqa: E402
+from janus_biometrics.policy import Thresholds  # noqa: E402
 from janus_biometrics.providers.sface import SFaceFaceVerifier  # noqa: E402
+from janus_biometrics.providers.speaker_wespeaker import (  # noqa: E402
+    SherpaWeSpeakerExtractor,
+    WeSpeakerVerifier,
+)
+from janus_biometrics.sensors import MicrophoneSource, SensorConfig  # noqa: E402
 
 _MODELS_YAML = Path(__file__).parent.parent / "src" / "janus_biometrics" / "models.yaml"
 _STATE_DIR = Path(__file__).parent / ".manual_camera_check"
 _ENROLLMENT_PATH = _STATE_DIR / "owner.json"
 _MODEL_ID = "sface-yunet-minifasnet-v1"
+
+_VOICE_ENROLLMENT_PATH = _STATE_DIR / "owner_voice.json"
+_VOICE_MODEL_ID = "wespeaker-resnet34-v1"
+_VOICE_SAMPLE_COUNT = 5  # matches enrollment.MIN_VOICE_SAMPLES
+_VOICE_UTTERANCE_S = 4.0  # above enrollment.MIN_VOICE_UTTERANCE_S (3.0s), with margin
+_VOICE_VERIFY_S = 4.0  # above the wespeaker provider's own too_short floor (2.5s), with margin
+# Conservative bench-style defaults, same reasoning __main__.py's own
+# _cmd_bench uses for --kind voice: this script has no calibrate step of
+# its own (unlike cmd_enroll's face path, which only ever produces
+# embeddings for later use by the real `python -m janus_biometrics
+# calibrate` command, not a live decision here) -- HIGH/MEDIUM/LOW still
+# needs *some* Thresholds to report a decision at all in cmd_verify_voice.
+_VOICE_THRESHOLDS = Thresholds(t_high=0.7, t_low=0.5)
 
 _WINDOW_TITLE = "Janus - biometrics preview"
 _ZOOM_DURATION_S = 0.6
@@ -366,6 +410,140 @@ def cmd_verify(args: argparse.Namespace) -> None:
         cv2.destroyAllWindows()
 
 
+def _make_voice_extractor() -> SherpaWeSpeakerExtractor:
+    """Resolves the `wespeaker` model entry the same way __main__.py's own
+    _make_voice_extractor does, and raises the same clear BiometricsError
+    (via ModelCache/ModelSourceError) if the operator has not yet filled
+    in models.yaml's template entry -- this script does not duplicate
+    that error message, it just surfaces whatever ModelCache.resolve()
+    itself raises.
+    """
+    cache = _make_cache()
+    model_path = cache.resolve("wespeaker")
+    return SherpaWeSpeakerExtractor(model_path)
+
+
+def _record_voice_sample(mic: MicrophoneSource, seconds: float, prompt: str):
+    """Blocking capture with a console countdown -- this script's stand-in
+    for the live camera preview's animated overlay, since there is no
+    equivalent visual feedback loop for audio here (see module docstring).
+    Raises SensorUnavailable if the device cannot be opened/captured from
+    (MicrophoneSource.capture_audio's own contract, propagated as-is).
+    """
+    print(f"[{prompt}] recording for {seconds:.0f}s starting in...")
+    for remaining in (3, 2, 1):
+        print(f"  {remaining}...")
+        time.sleep(1)
+    print("  Speak now.")
+    audio = mic.capture_audio(max_s=seconds)
+    print("  done.")
+    return audio
+
+
+def cmd_enroll_voice(args: argparse.Namespace) -> None:
+    mic = MicrophoneSource(SensorConfig(id="manual-check-mic", kind="microphone", device=args.mic))
+    try:
+        extractor = _make_voice_extractor()
+    except BiometricsError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from None
+
+    recordings = []
+    i = 0
+    while i < _VOICE_SAMPLE_COUNT:
+        try:
+            audio = _record_voice_sample(
+                mic, _VOICE_UTTERANCE_S, f"Enroll {i + 1}/{_VOICE_SAMPLE_COUNT}"
+            )
+        except SensorUnavailable as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(1) from None
+        recordings.append(audio)
+        print(f"  capture {i + 1}/{_VOICE_SAMPLE_COUNT} OK")
+        i += 1
+
+    try:
+        enrollment = enroll_voice(recordings, extractor, model_id=_VOICE_MODEL_ID)
+    except EnrollmentError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from None
+
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _VOICE_ENROLLMENT_PATH.write_text(
+        json.dumps(
+            {
+                "kind": enrollment.kind,
+                "profile": enrollment.profile,
+                "model_id": enrollment.model_id,
+                "dim": enrollment.dim,
+                "embeddings": enrollment.embeddings,
+                "centroid": enrollment.centroid,
+                "samples": enrollment.samples,
+                "created_at": enrollment.created_at.isoformat(),
+            }
+        )
+    )
+    print(f"\nEnrolled with {enrollment.samples} samples -> {_VOICE_ENROLLMENT_PATH}")
+    print("This is a plaintext test file, NOT the real encrypted Janus store.")
+
+
+def cmd_verify_voice(args: argparse.Namespace) -> None:
+    if not _VOICE_ENROLLMENT_PATH.exists():
+        print(
+            f"No voice enrollment found at {_VOICE_ENROLLMENT_PATH}. Run 'enroll-voice' first.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    data = json.loads(_VOICE_ENROLLMENT_PATH.read_text())
+    from datetime import datetime
+
+    enrollment = Enrollment(
+        kind=data["kind"],
+        profile=data["profile"],
+        model_id=data["model_id"],
+        dim=data["dim"],
+        embeddings=data["embeddings"],
+        centroid=data["centroid"],
+        samples=data["samples"],
+        created_at=datetime.fromisoformat(data["created_at"]),
+    )
+
+    mic = MicrophoneSource(SensorConfig(id="manual-check-mic", kind="microphone", device=args.mic))
+    try:
+        extractor = _make_voice_extractor()
+    except BiometricsError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from None
+
+    try:
+        audio = _record_voice_sample(mic, _VOICE_VERIFY_S, "Verify")
+    except SensorUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from None
+
+    verifier = WeSpeakerVerifier(
+        feature_extractor=extractor,
+        thresholds=_VOICE_THRESHOLDS,
+        liveness_mode="off",  # requisito 10: no voice anti-spoofing in v1
+    )
+    try:
+        result = asyncio.run(verifier.verify(audio, enrollment))
+    finally:
+        asyncio.run(verifier.close())
+
+    print("\n--- BiometricResult ---")
+    print(f"decision:    {result.decision}")
+    print(f"liveness:    {result.liveness}")
+    print(f"quality_ok:  {result.quality_ok}")
+    print(f"reason:      {result.reason}")
+    print(f"provider_id: {result.provider_id}")
+    print(f"model_id:    {result.model_id}")
+    print(
+        "\nNote: `score` is never exposed by BiometricResult by design "
+        "(requisito 16, see base.py) -- only the decision/reason above."
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -375,10 +553,23 @@ def main() -> None:
         help="Camera index to use (see 'list'). If omitted, auto-detects "
         "when exactly one camera is found.",
     )
+    parser.add_argument(
+        "--mic",
+        default=None,
+        help="Microphone device index or name (see sounddevice.query_devices() "
+        "for what your system exposes). If omitted, uses sounddevice's own "
+        "default input device.",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="List cameras OpenCV can actually open on this machine.")
     sub.add_parser("enroll", help="Capture 5 photos and store a test enrollment.")
     sub.add_parser("verify", help="Capture 1 photo and verify against the test enrollment.")
+    sub.add_parser(
+        "enroll-voice", help="Record 5 utterances and store a test voice enrollment."
+    )
+    sub.add_parser(
+        "verify-voice", help="Record 1 utterance and verify against the test voice enrollment."
+    )
     args = parser.parse_args()
 
     if args.command == "list":
@@ -387,6 +578,10 @@ def main() -> None:
         cmd_enroll(args)
     elif args.command == "verify":
         cmd_verify(args)
+    elif args.command == "enroll-voice":
+        cmd_enroll_voice(args)
+    elif args.command == "verify-voice":
+        cmd_verify_voice(args)
 
 
 if __name__ == "__main__":

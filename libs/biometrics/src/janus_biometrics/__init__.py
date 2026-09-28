@@ -8,6 +8,7 @@ from janus_biometrics.base import (
     PcmAudio,
     SpeakerVerifier,
 )
+from janus_biometrics.enrollment import CalibrationResult, calibrate, enroll_face, enroll_voice
 from janus_biometrics.errors import (
     BiometricsError,
     EnrollmentError,
@@ -25,6 +26,7 @@ __all__ = [
     "BiometricService",
     "BiometricStatus",
     "BiometricsError",
+    "CalibrationResult",
     "Decision",
     "Enrollment",
     "EnrollmentError",
@@ -38,5 +40,8 @@ __all__ = [
     "RemoteProviderNotAcknowledged",
     "SensorUnavailable",
     "SpeakerVerifier",
+    "calibrate",
     "detect_and_embed_faces",
+    "enroll_face",
+    "enroll_voice",
 ]

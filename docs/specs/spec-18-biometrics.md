@@ -1,7 +1,7 @@
 # Feature Spec: libs/biometrics/ (verificación local de voz y cara como señal de identidad)
 
 > **Status**: Ready for implementation, con una compuerta de rendimiento y de calibración en el hardware objetivo
-> **Last updated**: 2026-09-26
+> **Last updated**: 2026-09-27 (requisito 8ter: `FaceEmbedder` reutilizable y `extract_voice_embedding`, para `libs/presence`)
 > **Orden de implementación**: después de las specs 11 y 13. Depende de: spec 02 (configuración por parámetros), spec 13 (convenciones de proveedor y compuerta de rendimiento) y spec 16 (`janus_platform`). Lo consume `apps/core-gateway` (spec 11, requisito 26ter) y, solo para su función de bajo nivel `detect_and_embed_faces` (requisito 8bis), `libs/presence` (ver `libs/presence/SPEC.md`) como dependencia de librería unidireccional: `presence` depende de `biometrics`, nunca al revés.
 
 ---
@@ -48,6 +48,8 @@ Todo esto se revalida al fijar dependencias. No se verificó en esta sesión nin
 
 ### Excepción acotada: `detect_and_embed_faces` para consumidores 1:N (`libs/presence`)
 8bis. `BiometricService` es 1:1 y nunca deja salir un score ni un embedding (requisito 16); `libs/presence` (identificación 1:N, ver `libs/presence/SPEC.md`) necesita exactamente eso: detección multi-cara y el embedding crudo de cada una, para compararlos contra su propio índice HNSW. Resolver esto reusando `verify_face` es imposible sin romper esa garantía (rechaza multi-cara, nunca expone el vector), así que `libs/biometrics` expone una función de bajo nivel separada, fuera de `BiometricService` y de la fachada de verificación: `detect_and_embed_faces(image: bytes) -> list[FaceEmbedding]`, con `FaceEmbedding { embedding: list[float] (dim=128, SFace), quality_ok: bool }`. No aplica liveness, no aplica umbral, no compara contra ninguna plantilla, no pasa por `ProviderRegistry` ni por la política de intentos/bloqueo (requisito 13): es únicamente el paso de detección (YuNet) + extracción de embedding (SFace), reusado tal cual de la cadena `local:sface` para no duplicar ese código. Vive en un módulo propio (`low_level.py`, ver Directory Structure) para que quede visualmente separado de la fachada 1:1, y su docstring/README deja explícito que cualquier llamador recibe biometría cruda y es responsable de su propio manejo seguro (mismo criterio de `libs/presence/SPEC.md`, que sí declara guardar biometría de terceros a diferencia de esta librería). No se registra en el Registro de Capacidades (mismo criterio que el requisito 5): es una función de biblioteca, no algo que un spoke pida por MCP.
+
+8ter. Ampliación 2026-09-27 de la excepción acotada, para `libs/presence` en su rol de servicio de percepción de personas (ver `libs/presence/SPEC.md`, requisitos 21 a 39). (a) `FaceEmbedder`: objeto reutilizable que resuelve YuNet y SFace una sola vez y conserva el detector y el reconocedor entre llamadas. Motivo: `detect_and_embed_faces` llamada en bucle continúo recalcula el sha256 completo de cada modelo (`ModelCache.resolve` lo hace en cada llamada) y reconstruye detector y reconocedor en cada frame, lo que es inviable a varios cuadros por segundo. `detect_and_embed_faces` se conserva como envoltorio de un solo uso, con el mismo comportamiento. Un `FaceEmbedder` no es seguro entre hilos: se usa uno por hilo. (b) `extract_voice_embedding(audio: PcmAudio) -> VoiceEmbedding { embedding: list[float] (dim 256, WeSpeaker), speech_s: float, quality_ok: bool }`, análoga a `detect_and_embed_faces` para voz: sin umbral, sin comparación con ninguna plantilla, sin liveness, fuera de `BiometricService` y de la política de intentos. Mismas advertencias del 8bis: entrega biometría cruda y el llamador es responsable de su manejo seguro. La verificación 1:1 del dueño sigue siendo exclusiva de `BiometricService`; presence usa plantillas y claves propias y separadas.
 
 ### Voz
 9. Cadena de `local:wespeaker-resnet34`: normalizar a 16 kHz mono; recortar silencio; exigir duración mínima de habla (default 2.5 s; con menos, `INCONCLUSIVE` con motivo `too_short`); extraer características de espectro (`fbank` de 80 bandas); embedding; coseno contra la plantilla.
@@ -246,6 +248,7 @@ Errores (fuera del camino normal): RemoteProviderNotAcknowledged, ModelMismatch,
 - [ ] Voz sola no autoriza control con más de una señal activa
 - [ ] Atribución de pesos con licencia CC BY 4.0, MIT y Apache 2.0 en `NOTICE`
 - [ ] Entradas de audio e imagen validadas (tamaño y tipo) antes de decodificar
+- [ ] `FaceEmbedder` y `extract_voice_embedding` (requisito 8ter) documentadas en README como parte de la misma excepción acotada del 8bis, y sin uso fuera de `libs/presence`
 - [ ] `detect_and_embed_faces` (requisito 8bis) documentada en README como excepción explícita: expone embeddings crudos multi-cara, fuera de la garantía 1:1 del resto de la librería, y su uso queda acotado a `libs/presence`
 
 ---

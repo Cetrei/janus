@@ -216,11 +216,14 @@ requires-dist = [
     { name = "janus-platform", editable = "../platform" },
     { name = "numpy" },
     { name = "onnxruntime" },
+    { name = "opencv-python", marker = "extra == 'face-gui'" },
     { name = "opencv-python-headless", marker = "extra == 'face'" },
     { name = "pyyaml" },
+    { name = "sherpa-onnx", marker = "extra == 'voice'", specifier = "==1.13.8" },
+    { name = "sherpa-onnx-core", marker = "extra == 'voice'", specifier = "==1.13.8" },
     { name = "sounddevice", marker = "extra == 'sensors'" },
 ]
-provides-extras = ["face", "sensors"]
+provides-extras = ["face", "face-gui", "sensors", "voice"]
 
 [package.metadata.requires-dev]
 dev = [

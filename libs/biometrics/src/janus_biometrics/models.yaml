@@ -5,10 +5,12 @@
 # access and no redistribution question). `sha256` is mandatory in both
 # cases and is verified before the file is ever loaded (see models.py).
 #
-# yunet and sface: hashes confirmed by downloading the files directly and
-# running sha256sum (not copied from a third-party page) -- sizes matched
-# spec-18 (YuNet ~232KB, SFace ~38.7MB) and `file` confirmed real binaries,
-# not unresolved Git LFS pointers.
+# yunet, sface, and wespeaker: hashes confirmed by downloading the files
+# directly and running sha256sum (not copied from a third-party page) --
+# sizes matched spec-18 (YuNet ~232KB, SFace ~38.7MB, WeSpeaker ~25.3MB)
+# and the files were confirmed real (not unresolved Git LFS pointers);
+# wespeaker was further verified by actually loading it with
+# sherpa_onnx.SpeakerEmbeddingExtractor and confirming 256-dim output.
 
 models:
   scrfd:
@@ -89,3 +91,22 @@ models:
     sha256: "2aaf58e4d80295eb767a6275db1ecec9a16b129a3263f45b6eaf4d6c4d5be29b"
     url: "https://github.com/leandroveronezi/go-onnxface/releases/download/models-v1/minifasnet_v1se.onnx"
     license: "Apache-2.0"
+
+  wespeaker:
+    # Speaker verification (requisito 9), WeSpeaker ResNet34 (VoxCeleb,
+    # English), 256-dim embedding, consumed via sherpa-onnx's
+    # SpeakerEmbeddingExtractor (see providers/speaker_wespeaker.py --
+    # this resolves spec-18's fbank frontend Open Question, Architect
+    # decision 2026-09-27, see AGENT.md).
+    #
+    # RESOLVED 2026-09-27 (Implementer): downloaded directly from the
+    # sherpa-onnx release (not copied from a third-party page), sha256
+    # computed locally with sha256sum, and further verified by actually
+    # loading it with sherpa_onnx.SpeakerEmbeddingExtractor -- confirmed
+    # it produces 256-dim embeddings, matching
+    # SherpaWeSpeakerExtractor's own _EXPECTED_EMBEDDING_DIM check. This
+    # is a stronger verification than yunet/sface above (hash AND a real
+    # functional load), not just a hash match.
+    sha256: "5ef208a9da1453335308a6b6f4e6dfbd7e183a38b604de0a57664f45d257fe94"
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34.onnx"
+    license: "CC BY 4.0 (VoxCeleb) -- requires attribution, see NOTICE"

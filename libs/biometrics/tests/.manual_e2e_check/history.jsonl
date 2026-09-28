@@ -1,0 +1,2 @@
+{"at": "2026-09-28T01:25:37.477771+00:00", "kind": "face", "decision": "HIGH", "liveness": "PASS", "reason": "ok", "model_id": "sface-yunet-minifasnet-v1"}
+{"at": "2026-09-28T01:25:37.478019+00:00", "kind": "voice", "decision": "HIGH", "liveness": "NOT_CHECKED", "reason": "ok", "model_id": "wespeaker-resnet34-v1"}

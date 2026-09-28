@@ -56,3 +56,24 @@ models:
     sha256: "TODO(confirm): sha256sum of your local minifasnet onnx file"
     local_path: "/opt/janus/models/minifasnet_v2_v1se.onnx"
     license: "Apache-2.0"
+
+  wespeaker:
+    # Speaker verification (requisito 9), WeSpeaker ResNet34, 256-dim
+    # embedding. Consumed via sherpa-onnx's SpeakerEmbeddingExtractor
+    # (extra `voice`, see providers/speaker_wespeaker.py) -- this resolves
+    # spec-18's fbank frontend Open Question (Architect decision
+    # 2026-09-27; sherpa-onnx chosen over speakeronnx/kaldi-native-fbank,
+    # see AGENT.md).
+    #
+    # Unlike minifasnet above, this DOES have a fixed, verifiable upstream
+    # URL (sherpa-onnx's own release asset), so the real models.yaml uses
+    # `url` + a real sha256 ("5ef208a9da1453335308a6b6f4e6dfbd7e183a38b604de0a57664f45d257fe94",
+    # verified 2026-09-27 by downloading, sha256sum, AND loading it with
+    # sherpa_onnx.SpeakerEmbeddingExtractor to confirm 256-dim output) --
+    # copy that entry directly instead of the placeholder below if you
+    # want the exact same file. This placeholder stays local_path-based
+    # to keep this example's own "replace before use" pattern for anyone
+    # supplying a different wespeaker variant (e.g. cnceleb/zh) instead.
+    sha256: "TODO(confirm): sha256sum of your downloaded wespeaker resnet34 onnx file"
+    local_path: "/opt/janus/models/wespeaker_en_voxceleb_resnet34.onnx"
+    license: "CC BY 4.0 (VoxCeleb) -- requires attribution, see NOTICE"

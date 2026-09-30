@@ -40,13 +40,19 @@ LAST_SEEN = "2026-09-02T00:00:00+00:00"
 
 
 class FakeFace:
-    def __init__(self, embedding: list[float], quality_ok: bool = True) -> None:
+    def __init__(
+        self,
+        embedding: list[float],
+        quality_ok: bool = True,
+        bbox: tuple[int, int, int, int] | None = None,
+    ) -> None:
         self.embedding = embedding
         self.quality_ok = quality_ok
+        self.bbox = bbox
 
 
 def _faces(*faces: FakeFace):
-    return patch("janus_presence.service.detect_and_embed_faces", return_value=list(faces))
+    return patch.object(PresenceService, "_embed", return_value=list(faces))
 
 
 def _build(
@@ -294,7 +300,7 @@ class TestFindingF:
         pytest.importorskip("janus_presence._hnsw_cffi")
         service = _real_service(tmp_path)
         faces = [[FakeFace(make_embedding(float(i)))] for i in range(6)]
-        with patch("janus_presence.service.detect_and_embed_faces", side_effect=faces):
+        with patch.object(PresenceService, "_embed", side_effect=faces):
             service.enroll_known_person("Joanfer", samples=[b"s"] * 6)
         service.close()
 
@@ -313,7 +319,7 @@ class TestFindingF:
         pytest.importorskip("janus_presence._hnsw_cffi")
         service = _real_service(tmp_path)
         faces = [[FakeFace(make_embedding(float(i)))] for i in range(4)]
-        with patch("janus_presence.service.detect_and_embed_faces", side_effect=faces):
+        with patch.object(PresenceService, "_embed", side_effect=faces):
             first = service.enroll_known_person("A", samples=[b"s", b"s"])
             service.enroll_known_person("B", samples=[b"s", b"s"])
         service._store.delete_all_samples_for_person(first.person_id)

@@ -55,3 +55,42 @@ uv sync --extra camera   # opencv-python-headless para LocalCameraSource
 uv run pytest -v
 uv run ruff check .
 ```
+
+## Runner autónomo
+
+Mientras no exista Janus, `presence` corre solo: observa las cámaras
+configuradas, lleva el log de eventos y sirve una página local para revisar
+y nombrar a los desconocidos (SPEC.md, requisito 39).
+
+```bash
+uv run python -m janus_presence run --config presence.toml
+```
+
+Config mínima (`presence.toml`). Los dos umbrales no tienen valor por
+defecto: salen de calibrar con datos reales, así que el archivo tiene que
+declararlos. Una clave desconocida es un error, para que un typo no pase
+en silencio.
+
+```toml
+state_dir = "~/.local/share/janus"
+
+[presence]
+match_threshold = 0.6
+match_threshold_ambiguous = 1.2
+
+[[sources]]
+source_id = "cuarto"
+kind = "camera"
+device = 0        # índice de la cámara local
+sample_fps = 4
+```
+
+Al arrancar, el runner escribe en el log la URL de la página de revisión
+(por defecto `http://127.0.0.1:8765/`, solo loopback) y la ruta del archivo
+con el token de acceso (`<state_dir>/presence/review.token`, permisos 0600).
+Se entra pegando ese token una vez; la sesión vence sola por inactividad.
+Ctrl+C o SIGTERM cierran en orden (página, cámaras, jobs, base de datos).
+
+Códigos de salida: `0` parada limpia, `1` no pudo arrancar o se detuvo por
+un error corregible (clave o modelo ausente, puerto ocupado), `2` config o
+argumentos inválidos. `--log-level debug|info|warning|error` ajusta el log.

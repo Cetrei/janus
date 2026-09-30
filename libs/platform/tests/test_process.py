@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 
 import pytest
@@ -40,3 +41,41 @@ def test_spawn_exposes_pid():
     handle = spawn(["true"])
     assert isinstance(handle.pid, int)
     assert handle.pid > 0
+
+
+async def test_stdin_is_none_by_default():
+    handle = spawn(["true"])
+    assert handle.stdin is None
+    await handle.wait()
+
+
+async def test_stdin_pipe_streams_bytes_to_the_child(tmp_path):
+    output = tmp_path / "received.bin"
+    handle = spawn(
+        ["sh", "-c", 'cat > "$1"', "sh", str(output)],
+        stdin=subprocess.PIPE,
+    )
+    assert handle.stdin is not None
+
+    handle.stdin.write(b"raw-frame-bytes")
+    handle.stdin.close()
+    exit_code = await handle.wait()
+
+    assert exit_code == 0
+    assert output.read_bytes() == b"raw-frame-bytes"
+
+
+async def test_kill_stops_a_process_synchronously():
+    handle = spawn(["sleep", "30"])
+    assert handle.poll() is None
+
+    handle.kill()
+    exit_code = await handle.wait()
+
+    assert exit_code != 0
+
+
+async def test_kill_is_a_noop_on_an_exited_process():
+    handle = spawn(["true"])
+    await handle.wait()
+    handle.kill()

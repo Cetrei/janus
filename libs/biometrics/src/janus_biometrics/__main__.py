@@ -19,6 +19,8 @@ import secrets
 import sys
 from pathlib import Path
 
+from janus_platform.paths import default_state_dir, write_private
+
 from janus_biometrics import enrollment
 from janus_biometrics.base import Enrollment, PcmAudio
 from janus_biometrics.bench import BenchReport, bench_verifier
@@ -31,7 +33,6 @@ from janus_biometrics.providers.speaker_wespeaker import (
     WeSpeakerVerifier,
 )
 from janus_biometrics.store import EncryptedTemplateStore
-from janus_platform.paths import default_state_dir, write_private
 
 _KEY_SIZE_BYTES = 32  # AES-256 (requisito 17)
 
@@ -262,7 +263,10 @@ def _cmd_bench(args: argparse.Namespace) -> int:
             f"No {args.kind} enrollment for profile '{args.profile}'; enroll before running bench."
         )
     if not args.sample:
-        raise BiometricsError(f"--sample <{'image' if args.kind == 'face' else 'wav'} file> is required to bench {args.kind} verification")
+        sample_kind = "image" if args.kind == "face" else "wav"
+        raise BiometricsError(
+            f"--sample <{sample_kind} file> is required to bench {args.kind} verification"
+        )
 
     if args.kind == "face":
         model_cache = ModelCache(_default_models_yaml(), Path(args.state_dir) / "models")
@@ -358,7 +362,9 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--kind", choices=["face", "voice"], default="face")
     bench.add_argument("--profile", default="owner")
     bench.add_argument(
-        "--sample", default=None, help="Sample image (face) or .wav file (voice) to verify repeatedly"
+        "--sample",
+        default=None,
+        help="Sample image (face) or .wav file (voice) to verify repeatedly",
     )
     bench.add_argument("--iterations", type=int, default=20)
     bench.set_defaults(func=_cmd_bench)

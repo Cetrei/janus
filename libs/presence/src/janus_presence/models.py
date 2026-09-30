@@ -263,10 +263,25 @@ class PresenceConfig:
     forget_after_days: int = 30
     clip_preroll_s: int = 5
     clip_audio: bool = False
+    # requisito 23: the voice modality has its own thresholds, also without a
+    # factory default. Both None means voice is off; setting one without the
+    # other is a config error.
+    voice_match_threshold: float | None = None
+    voice_match_threshold_ambiguous: float | None = None
 
     def __post_init__(self) -> None:
         if self.match_threshold_ambiguous <= self.match_threshold:
             raise ValueError(
                 "match_threshold_ambiguous must be greater than match_threshold "
                 "(requisito 5: the ambiguous zone sits above the main threshold)"
+            )
+        voice_low = self.voice_match_threshold
+        voice_high = self.voice_match_threshold_ambiguous
+        if (voice_low is None) != (voice_high is None):
+            raise ValueError(
+                "voice_match_threshold and voice_match_threshold_ambiguous must be set together"
+            )
+        if voice_low is not None and voice_high is not None and voice_high <= voice_low:
+            raise ValueError(
+                "voice_match_threshold_ambiguous must be greater than voice_match_threshold"
             )

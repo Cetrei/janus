@@ -20,6 +20,12 @@ class PersonNotFoundError(PresenceError):
         self.person_id = person_id
 
 
+class ClipNotFoundError(PresenceError):
+    def __init__(self, clip_ref: str) -> None:
+        super().__init__(f"No clip file found at '{clip_ref}'")
+        self.clip_ref = clip_ref
+
+
 class CameraNotFoundError(PresenceError):
     def __init__(self, camera_id: str) -> None:
         super().__init__(f"No camera configured with camera_id '{camera_id}'")

@@ -12,6 +12,7 @@ else:
     _IMPORT_ERROR = None
 
 EMBEDDING_DIM = 128  # matches the SFace embedding janus_biometrics exposes
+VOICE_EMBEDDING_DIM = 256  # matches the WeSpeaker ResNet34 embedding (requisito 23)
 
 _DEFAULT_MAX_NEIGHBORS_PER_LAYER = 16
 _DEFAULT_EF_CONSTRUCTION = 200

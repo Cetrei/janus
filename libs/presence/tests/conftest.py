@@ -75,6 +75,34 @@ class FakeFrameSource(FrameSource):
         return frame
 
 
+class FakeClock:
+    """A clock the test moves by hand, so scheduling and backoff are tested
+    without sleeping."""
+
+    def __init__(self, now: float = 0.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class CountingLock:
+    """Stands in for the service lock: records how many times it was taken and
+    whether it is held right now."""
+
+    def __init__(self) -> None:
+        self.entries = 0
+        self.active = False
+
+    def __enter__(self) -> CountingLock:
+        self.entries += 1
+        self.active = True
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.active = False
+
+
 class FakeDecisionPort:
     """Deterministic decision-model port: the test sets the answer to
     return (SPEC.md requisito 15)."""
@@ -101,3 +129,15 @@ def tmp_state_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def fake_index() -> FakeHnswIndex:
     return FakeHnswIndex()
+
+
+@pytest.fixture
+def fake_ffmpeg(tmp_path: Path) -> str:
+    """A stand-in `ffmpeg` executable that copies its stdin into the file
+    named by its last argument, which is where ClipRecorder puts the output
+    path. It lets tests exercise the real spawn + pipe + writer thread path
+    without ffmpeg installed. POSIX only (it is a shell script)."""
+    script = tmp_path / "fake-ffmpeg"
+    script.write_text('#!/bin/sh\nfor last; do :; done\ncat > "$last"\n')
+    script.chmod(0o755)
+    return str(script)

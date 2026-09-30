@@ -96,12 +96,12 @@ from janus_biometrics.camera import (  # noqa: E402
     list_cameras,
     print_camera_list,
 )
+from janus_biometrics.enrollment import enroll_voice  # noqa: E402
 from janus_biometrics.errors import (  # noqa: E402
     BiometricsError,
     EnrollmentError,
     SensorUnavailable,
 )
-from janus_biometrics.enrollment import enroll_voice  # noqa: E402
 from janus_biometrics.models import ModelCache  # noqa: E402
 from janus_biometrics.policy import Thresholds  # noqa: E402
 from janus_biometrics.providers.sface import SFaceFaceVerifier  # noqa: E402

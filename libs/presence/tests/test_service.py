@@ -16,9 +16,15 @@ class FakeFace:
     """Stand-in for janus_biometrics.base.FaceEmbedding, so tests never
     need real ONNX models (SPEC.md Testing Requirements)."""
 
-    def __init__(self, embedding: list[float], quality_ok: bool = True) -> None:
+    def __init__(
+        self,
+        embedding: list[float],
+        quality_ok: bool = True,
+        bbox: tuple[int, int, int, int] | None = None,
+    ) -> None:
         self.embedding = embedding
         self.quality_ok = quality_ok
+        self.bbox = bbox
 
 
 def make_service(
@@ -51,7 +57,7 @@ def make_service(
 
 
 def _patch_faces(*faces: FakeFace):
-    return patch("janus_presence.service.detect_and_embed_faces", return_value=list(faces))
+    return patch.object(PresenceService, "_embed", return_value=list(faces))
 
 
 class TestMatchThreshold:

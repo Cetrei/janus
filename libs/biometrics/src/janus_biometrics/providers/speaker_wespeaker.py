@@ -282,7 +282,7 @@ class WeSpeakerProvider(WeSpeakerVerifier):
             return
         model_path = self._cache.resolve("wespeaker")
         extractor = SherpaWeSpeakerExtractor(model_path)
-        super(WeSpeakerProvider, self).__init__(
+        super().__init__(
             feature_extractor=extractor,
             thresholds=self._pending_thresholds,
             liveness_mode=self._pending_liveness_mode,

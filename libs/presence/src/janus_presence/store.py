@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -346,6 +347,9 @@ class PresenceStore:
         self._db_path = self._root / "presence.db"
         self._samples_root = self._root / "samples"
         self._pending_root = self._root / "pending"
+        self._snapshots_root = self._root / "snapshots"
+        self._thumbs_root = self._root / "evidence_thumbs"
+        self._settings_path = self._root / "settings.json"
         self._aesgcm = AESGCM(key)
         self._in_transaction = False
 
@@ -1006,23 +1010,119 @@ class PresenceStore:
     def _pending_path(self, evidence_id: str) -> Path:
         return self._pending_root / f"{_component(evidence_id)}.enc"
 
+    # -- encrypted evidence thumbnails (review page) ---------------------------
+    #
+    # One small JPEG of the face for each pending evidence, so the owner can see
+    # who they are confirming or rejecting. Same AES-256-GCM envelope as
+    # snapshots. It lives only while the evidence is pending: resolving or
+    # forgetting the evidence deletes it.
+
+    def save_evidence_thumb(self, evidence_id: str, jpeg_bytes: bytes) -> None:
+        self._thumbs_root.mkdir(parents=True, exist_ok=True)
+        path = self._thumb_path(evidence_id)
+        path.write_bytes(self._encrypt_bytes(jpeg_bytes))
+        make_private(path)
+
+    def load_evidence_thumb(self, evidence_id: str) -> bytes | None:
+        path = self._thumb_path(evidence_id)
+        if not path.exists():
+            return None
+        return self._decrypt_bytes(path)
+
+    def has_evidence_thumb(self, evidence_id: str) -> bool:
+        return self._thumb_path(evidence_id).exists()
+
+    def delete_evidence_thumb(self, evidence_id: str) -> None:
+        secure_delete(self._thumb_path(evidence_id))
+
+    def _thumb_path(self, evidence_id: str) -> Path:
+        return self._thumbs_root / f"{_component(evidence_id)}.jpg.enc"
+
+    # -- settings the owner changes from the review page --------------------------
+
+    def get_setting(self, key: str) -> Any | None:
+        return self._read_settings().get(key)
+
+    def set_setting(self, key: str, value: Any) -> None:
+        """Writes to a temporary file and renames it over the real one, so a crash
+        never leaves a half written settings file."""
+        settings = self._read_settings()
+        settings[key] = value
+        temporary = self._settings_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(settings), encoding="utf-8")
+        make_private(temporary)
+        temporary.replace(self._settings_path)
+
+    def _read_settings(self) -> dict[str, Any]:
+        if not self._settings_path.exists():
+            return {}
+        try:
+            loaded = json.loads(self._settings_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            _log.warning("ignoring unreadable settings file %s: %s", self._settings_path, exc)
+            return {}
+        return loaded if isinstance(loaded, dict) else {}
+
+    # -- encrypted snapshots (requisito 12, 38, ampliación F2) -----------------
+    #
+    # A snapshot is one JPEG frame taken at the moment an UNKNOWN person is
+    # first detected (requisito 11, 13), kept only while that person has no
+    # label (requisito 12). Like samples and pending samples, the plaintext
+    # JPEG never touches disk: this stores the same AES-256-GCM envelope
+    # (nonce + ciphertext) the embedding methods use, just with raw JPEG
+    # bytes as the payload instead of a serialized float vector.
+
+    def save_snapshot(self, person_id: str, jpeg_bytes: bytes) -> str:
+        """Encrypts and writes one snapshot for person_id, returning the
+        `snapshot_ref` path to store on the PersonRecord. Overwrites any
+        snapshot already on file for this person (there is only ever one:
+        requisito 12 retains a single frame, not a gallery)."""
+        self._snapshots_root.mkdir(parents=True, exist_ok=True)
+        path = self._snapshot_path(person_id)
+        path.write_bytes(self._encrypt_bytes(jpeg_bytes))
+        make_private(path)
+        return str(path)
+
+    def load_snapshot(self, person_id: str) -> bytes | None:
+        """Decrypts and returns the retained JPEG bytes for person_id, or
+        None if no snapshot is on file (already named, expired, or never
+        captured because quality_ok was False)."""
+        path = self._snapshot_path(person_id)
+        if not path.exists():
+            return None
+        return self._decrypt_bytes(path)
+
+    def delete_snapshot(self, person_id: str) -> None:
+        """Securely deletes the retained snapshot, if any. Idempotent, same
+        as every other delete in this class."""
+        secure_delete(self._snapshot_path(person_id))
+
+    def _snapshot_path(self, person_id: str) -> Path:
+        return self._snapshots_root / f"{_component(person_id)}.jpg.enc"
+
     # -- encryption -------------------------------------------------------------
 
     def _encrypt_embedding(self, embedding: list[float]) -> bytes:
         payload = " ".join(repr(value) for value in embedding).encode("utf-8")
+        return self._encrypt_bytes(payload)
+
+    def _encrypt_bytes(self, payload: bytes) -> bytes:
         nonce = secrets.token_bytes(_NONCE_SIZE)
         return nonce + self._aesgcm.encrypt(nonce, payload, associated_data=None)
 
     def _decrypt_sample(self, path: Path) -> list[float]:
+        payload = self._decrypt_bytes(path)
+        return [float(value) for value in payload.decode("utf-8").split(" ")]
+
+    def _decrypt_bytes(self, path: Path) -> bytes:
         raw = path.read_bytes()
         nonce, ciphertext = raw[:_NONCE_SIZE], raw[_NONCE_SIZE:]
         try:
-            payload = self._aesgcm.decrypt(nonce, ciphertext, associated_data=None)
+            return self._aesgcm.decrypt(nonce, ciphertext, associated_data=None)
         except InvalidTag as exc:
             raise PresenceError(
-                f"Sample at {path} could not be decrypted: wrong key or tampered file."
+                f"File at {path} could not be decrypted: wrong key or tampered file."
             ) from exc
-        return [float(value) for value in payload.decode("utf-8").split(" ")]
 
 
 def new_person_id() -> str:

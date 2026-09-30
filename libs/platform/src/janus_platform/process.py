@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
+from typing import IO
 
 
 def _is_windows() -> bool:
@@ -26,8 +27,21 @@ class ProcessHandle:
     def pid(self) -> int:
         return self._popen.pid
 
+    @property
+    def stdin(self) -> IO[bytes] | None:
+        """The child's stdin pipe, or None unless spawn() was given
+        stdin=subprocess.PIPE. Exposed so callers that stream data into a
+        child (raw video frames into ffmpeg) never reach into _popen."""
+        return self._popen.stdin
+
     def poll(self) -> int | None:
         return self._popen.poll()
+
+    def kill(self) -> None:
+        """Synchronous hard kill of the process itself, for sync callers that
+        cannot await terminate(). A no-op if it already exited."""
+        if self._popen.poll() is None:
+            self._popen.kill()
 
     async def wait(self) -> int:
         return await asyncio.to_thread(self._popen.wait)
@@ -86,14 +100,21 @@ def spawn(
     env: dict[str, str] | None = None,
     cwd: str | Path | None = None,
     new_session: bool = True,
+    stdin: int | None = None,
 ) -> ProcessHandle:
     """Launches via subprocess.Popen(shell=False). Never accepts a command
     string, only an argument list. POSIX: start_new_session. Windows:
-    CREATE_NEW_PROCESS_GROUP."""
+    CREATE_NEW_PROCESS_GROUP. Pass stdin=subprocess.PIPE to get a writable
+    ProcessHandle.stdin; the default leaves stdin inherited, as before."""
     if isinstance(argv, str):
         raise TypeError("spawn() requires a list of arguments, never a command string")
 
-    kwargs: dict = {"shell": False, "env": env, "cwd": str(cwd) if cwd else None}
+    kwargs: dict = {
+        "shell": False,
+        "env": env,
+        "cwd": str(cwd) if cwd else None,
+        "stdin": stdin,
+    }
 
     if new_session:
         if _is_windows():

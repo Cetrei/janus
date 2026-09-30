@@ -21,6 +21,7 @@ __all__ = [
     "PcmAudio",
     "SecretRef",
     "SpeakerVerifier",
+    "VoiceEmbedding",
 ]
 
 
@@ -70,10 +71,32 @@ class FaceEmbedding:
 
     embedding: list[float]
     quality_ok: bool
+    # (x, y, w, h) in pixels of the original frame, clamped to it. Optional so
+    # every existing caller keeps working; libs/presence uses it to know
+    # where to zoom in a clip (requisito 32). A location is not a secret
+    # biometric, unlike the embedding.
+    bbox: tuple[int, int, int, int] | None = None
 
     def __post_init__(self) -> None:
         if len(self.embedding) != 128:
             raise ValueError("FaceEmbedding requires a 128-dim SFace embedding")
+
+
+@dataclass(frozen=True)
+class VoiceEmbedding:
+    """Raw voice output for the bounded exception (requisito 8ter b), the
+    voice counterpart of FaceEmbedding. Consumed only by libs/presence for
+    1:N identification. `speech_s` is the speech left after trimming silence;
+    `quality_ok` is False when that is under the minimum speech duration, so
+    the caller decides whether so short a sample is worth matching on."""
+
+    embedding: list[float]
+    speech_s: float
+    quality_ok: bool
+
+    def __post_init__(self) -> None:
+        if len(self.embedding) != 256:
+            raise ValueError("VoiceEmbedding requires a 256-dim WeSpeaker embedding")
 
 
 @dataclass(frozen=True)

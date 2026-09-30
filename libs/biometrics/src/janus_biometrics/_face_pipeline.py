@@ -66,6 +66,10 @@ def create_detector(yunet_path: str, image_shape: tuple[int, int]) -> cv2.FaceDe
     )
 
 
+def fit_detector_input(detector: cv2.FaceDetectorYN, image_shape: tuple[int, int]) -> None:
+    detector.setInputSize((image_shape[1], image_shape[0]))
+
+
 def create_recognizer(sface_path: str) -> cv2.FaceRecognizerSF:
     return cv2.FaceRecognizerSF.create(str(sface_path), "")
 
@@ -254,6 +258,18 @@ def detect_faces_scrfd(
 # camera/shell access). If verify() produces visibly misaligned crops or a
 # degraded embedding with local:scrfd specifically (not local:sface), check
 # keypoint order here first before assuming the model itself is at fault.
+
+
+def face_bbox(frame: np.ndarray, face: np.ndarray) -> tuple[int, int, int, int]:
+    """The detected face as (x, y, w, h) integer pixels, clamped to the frame.
+    Detectors can return boxes that hang over an edge (negative x or y, or a
+    width past the border); consumers that crop or zoom need a box that is
+    always inside the image."""
+    frame_h, frame_w = frame.shape[:2]
+    x, y, w, h = (int(round(float(v))) for v in face[:4])
+    x0, y0 = max(x, 0), max(y, 0)
+    x1, y1 = min(x + w, frame_w), min(y + h, frame_h)
+    return x0, y0, max(x1 - x0, 0), max(y1 - y0, 0)
 
 
 def check_quality(frame: np.ndarray, face: np.ndarray) -> tuple[bool, str]:

@@ -54,8 +54,7 @@ sys.path.insert(0, str(_BIOMETRICS_TESTS))
 import manual_camera_check as cam  # noqa: E402, I001
 import cv2  # noqa: E402
 
-from janus_biometrics import _face_pipeline as pipeline  # noqa: E402
-from janus_biometrics import detect_and_embed_faces  # noqa: E402
+from janus_biometrics import FaceEmbedder  # noqa: E402
 from janus_platform.paths import write_private  # noqa: E402
 
 from janus_presence.errors import PresenceError  # noqa: E402
@@ -151,11 +150,12 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 
 def _collect_embeddings(camera, detector, cache, count: int, who: str) -> list[list[float]]:
     embeddings: list[list[float]] = []
+    embedder = FaceEmbedder(cache, normalized=True)
     while len(embeddings) < count:
         image = _capture(camera, detector, f"{who}: {len(embeddings) + 1}/{count}")
         if image is None:
             raise SystemExit("Aborted by user.")
-        faces = detect_and_embed_faces(image, cache)
+        faces = embedder.embed(image)
         if len(faces) != 1:
             print(f"  need exactly one face, saw {len(faces)}. Again.")
             continue

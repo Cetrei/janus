@@ -113,6 +113,9 @@ class FakeService:
     def set_role(self, person_id: str, role: str) -> None:
         self._enter("set_role", person_id, role)
 
+    def roles(self) -> tuple[str, ...]:
+        return ("owner", "family")
+
     def confirm_evidence(self, evidence_id: str) -> None:
         self._enter("confirm_evidence", evidence_id)
 
@@ -372,6 +375,10 @@ class TestSetRole:
 
         assert rig.service.calls == [("set_role", "ana", "owner")]
         assert rig.service.held == [True]
+
+    def test_the_vocabulary_comes_from_the_service_without_the_lock(self, rig):
+        assert rig.backend.roles() == ("owner", "family")
+        assert rig.lock.entries == 0
 
 
 class TestSnapshotAndChanges:

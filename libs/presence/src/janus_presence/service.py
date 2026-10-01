@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -23,6 +23,7 @@ from janus_presence.errors import PersonNotFoundError, PresenceError, PresenceUn
 from janus_presence.frame_source import FrameSource
 from janus_presence.index import PresenceIndex
 from janus_presence.models import (
+    DEFAULT_ROLES,
     NO_INDEXED_EMBEDDING,
     Candidate,
     ClipRecord,
@@ -215,6 +216,7 @@ class PresenceService:
         voice_embedder: VoiceEmbedder | None = None,
         voice_match_threshold: float | None = None,
         voice_match_threshold_ambiguous: float | None = None,
+        roles: Sequence[str] = DEFAULT_ROLES,
     ) -> None:
         if match_threshold_ambiguous <= match_threshold:
             raise ValueError("match_threshold_ambiguous must be greater than match_threshold")
@@ -247,6 +249,8 @@ class PresenceService:
         self._owns_voice_embedder = voice_embedder is None
         self._voice_match_threshold = voice_match_threshold
         self._voice_match_threshold_ambiguous = voice_match_threshold_ambiguous
+        # Compared in lower case, like the role itself (requisito 25, 48).
+        self._roles = tuple(dict.fromkeys(role.strip().lower() for role in roles))
         self._callbacks: list[Callable[[PersonSeenEvent], None]] = []
         self._visit_started_callbacks: list[Callable[[Visit], None]] = []
         self._visit_ended_callbacks: list[Callable[[Visit], None]] = []
@@ -994,13 +998,24 @@ class PresenceService:
         self._store.update_person(person)
         return person
 
+    def roles(self) -> tuple[str, ...]:
+        """requisito 25: the vocabulary `set_role` accepts, as declared in config."""
+        return self._roles
+
     def set_role(self, person_id: str, role: str) -> PersonRecord:
         """requisito 25: role is a label from presence.roles, never a
-        permission by itself. Authorization stays in Janus."""
+        permission by itself. Authorization stays in Janus. A role outside
+        the vocabulary is refused, because an automation matches it exactly
+        and a typo would fail silently."""
+        normalized = role.strip().lower()
+        if normalized not in self._roles:
+            raise PresenceError(
+                f"Role '{role}' is not in presence.roles ({', '.join(self._roles)})"
+            )
         person = self._store.get_person(person_id)
         if person is None:
             raise PersonNotFoundError(person_id)
-        person.role = role
+        person.role = normalized
         self._store.update_person(person)
         return person
 

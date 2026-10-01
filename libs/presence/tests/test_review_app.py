@@ -44,6 +44,7 @@ class FakeBackend:
         self.thumbnails: dict[str, bytes] = {}
         self.frames: dict[str, bytes] = {}
         self.thresholds: tuple[float, float] = (1.0, 1.3)
+        self.vocabulary: tuple[str, ...] = ("owner", "family", "guest", "staff")
         self.calls: list[tuple] = []
         self.failure: Exception | None = None
 
@@ -70,6 +71,9 @@ class FakeBackend:
 
     def set_role(self, person_id: str, role: str) -> None:
         self._change("set_role", person_id, role)
+
+    def roles(self) -> tuple[str, ...]:
+        return self.vocabulary
 
     def confirm_evidence(self, evidence_id: str) -> None:
         self._change("confirm_evidence", evidence_id)
@@ -164,12 +168,15 @@ def csrf_of(app: ReviewApp, cookie: str) -> str:
 
 
 def make_group(
-    label: str | None = "Ana", state: str = "provisional", has_snapshot: bool = True
+    label: str | None = "Ana",
+    state: str = "provisional",
+    has_snapshot: bool = True,
+    role: str | None = None,
 ) -> PersonGroup:
     item = EvidenceItem(
         EVIDENCE_ID, NOW, "cuarto", hypothesis_label="Beto", hypothesis_confidence=0.55
     )
-    return PersonGroup(PERSON_ID, label, state, None, has_snapshot, NOW, NOW, (item,))
+    return PersonGroup(PERSON_ID, label, state, role, has_snapshot, NOW, NOW, (item,))
 
 
 @pytest.fixture
@@ -786,15 +793,18 @@ class TestRole:
         assert harness.audit == [("review_set_role", {"person_id": PERSON_ID})]
 
     @pytest.mark.parametrize(
-        "role", ["", "   ", "two words", "1abc", "dueño", "a" * 33, "own<er>", "-owner"]
+        "role",
+        ["", "   ", "two words", "1abc", "dueño", "a" * 33, "own<er>", "-owner", "onwer", "admin"],
     )
-    def test_a_role_that_is_not_a_short_plain_word_is_refused(self, harness, signed_in, role):
+    def test_a_role_that_is_not_in_the_vocabulary_is_refused(self, harness, signed_in, role):
         response = act(harness, signed_in, "/role", person_id=PERSON_ID, role=role)
 
         assert header(response, "Location") == "/?msg=invalid"
         assert harness.backend.calls == []
 
-    def test_the_longest_allowed_role_is_accepted(self, harness, signed_in):
+    def test_any_role_of_the_configured_vocabulary_is_accepted(self, harness, signed_in):
+        harness.backend.vocabulary = ("a" * 32,)
+
         response = act(harness, signed_in, "/role", person_id=PERSON_ID, role="a" * 32)
 
         assert header(response, "Location") == "/?msg=role"
@@ -831,6 +841,42 @@ class TestRole:
 
         assert 'action="/role"' in body
         assert "Guardar rol" in body
+
+    def test_the_role_form_offers_the_vocabulary_as_choices_not_free_text(
+        self, harness, signed_in
+    ):
+        harness.backend.groups = [make_group(label="Ana")]
+
+        body = body_of(get(harness.app, "/", signed_in.cookie))
+
+        assert '<select name="role" required>' in body
+        for role in ("owner", "family", "guest", "staff"):
+            assert f'<option value="{role}">{role}</option>' in body
+        assert 'name="role" maxlength' not in body
+        assert "Elegir rol" in body
+
+    def test_the_current_role_is_the_selected_choice_and_there_is_no_placeholder(
+        self, harness, signed_in
+    ):
+        harness.backend.groups = [make_group(label="Ana", role="family")]
+
+        body = body_of(get(harness.app, "/", signed_in.cookie))
+
+        assert '<option value="family" selected>family</option>' in body
+        assert "Elegir rol" not in body
+
+    def test_a_role_that_left_the_config_stays_as_the_current_choice(self, harness, signed_in):
+        harness.backend.groups = [make_group(label="Ana", role="vecino")]
+
+        body = body_of(get(harness.app, "/", signed_in.cookie))
+
+        assert '<option value="vecino" selected>vecino</option>' in body
+
+    def test_an_empty_vocabulary_shows_no_role_form(self, harness, signed_in):
+        harness.backend.vocabulary = ()
+        harness.backend.groups = [make_group(label="Ana")]
+
+        assert 'action="/role"' not in body_of(get(harness.app, "/", signed_in.cookie))
 
     def test_a_person_without_a_name_gets_no_role_form(self, harness, signed_in):
         harness.backend.groups = [make_group(label=None, state="unknown")]

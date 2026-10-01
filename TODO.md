@@ -13,15 +13,15 @@ El kanban ya existe: GitHub Issues del repo, un épico por spec (20 specs, 20 é
 Primera versión útil sin esperar al núcleo de Janus (specs 2 a 11): luz al llegar, registro de quién entra y sale, comandos de voz para luces. Home Assistant ejecuta las acciones y la voz local (Assist); `libs/presence` aporta el reconocimiento y emite eventos. Detalle y requisitos 40 a 46 en `libs/presence/SPEC.md`, sección "Ampliación 2026-09-30".
 
 Orden:
-1. `libs/presence`: el runner, el log JSONL, la página de revisión y `ha_sink.py` ya existen y `pytest` dio 527 passed con `ruff` limpio. Escritos después y sin ejecutar: el subcomando `visits` (`visit_report.py`), los tests del stream en vivo y las secciones nuevas del README. Correr desde `libs/presence`: `uv run pytest` y `uv run ruff check .`.
+1. `libs/presence`: el runner, el log JSONL, la página de revisión y `ha_sink.py` ya existen y `pytest` dio 527 passed con `ruff` limpio. Escritos después y sin ejecutar: el subcomando `visits` (`visit_report.py`), los tests del stream en vivo, las secciones nuevas del README y la ruta `/role` con su formulario y tests. Correr desde `libs/presence`: `uv run pytest` y `uv run ruff check .`.
 2. Ajustar los umbrales con la cámara real desde la página de revisión (son obligatorios en el TOML del runner).
-3. Automatización en Home Assistant que escucha el evento `janus_presence` (luz al llegar, con condición de sol). El ejemplo está en el README de `libs/presence` y filtra por `label`, porque la página de revisión todavía no asigna rol. Solo luces, clima y medios; nada de cerraduras ni alarma.
+3. Automatización en Home Assistant que escucha el evento `janus_presence` (luz al llegar, con condición de sol). El ejemplo está en el README de `libs/presence` y filtra por `label`; el rol queda como mejora porque no está en el camino crítico. Solo luces, clima y medios; nada de cerraduras ni alarma.
 4. Aceptación: llegar frente a la cámara enciende la luz y `events.jsonl` muestra la visita abierta y cerrada.
 
 ## Núcleo de Janus (después de M1, en paralelo si hay tiempo)
 
 - Spec 01 (`proto/`): #44 y #45 escritos (2026-09-30), pendiente correr `buf lint` y `buf generate` desde `proto/` sobre los seis `.proto` nuevos (revisados a mano, sin hallazgos) y hacer commit de `proto/` y `libs/proto-py/src/`; falta #46 (`libs/proto-py` con fachada, helpers y `capability_ids`), que necesita ese código generado.
-- Decisión abierta para el Architect: rol desde la página de revisión (`/role`, `ReviewBackend.set_role`, formulario). Hoy `set_role` solo existe en el servicio.
+- Rol desde la página de revisión (decidido por el Architect, 2026-10-01, requisito 48 de `libs/presence/SPEC.md`): la ruta `/role`, `ReviewBackend.set_role` y el formulario ya están escritos con sus tests (sin ejecutar). El vocabulario `presence.roles` ya se aplica en `set_role` y la página lo muestra como `<select>` (escrito el 2026-10-01, sin ejecutar). Las personas ESTABLISHED no aparecen en la página y eso queda fuera de M1.
 - Specs 16, 2, 3, 6, 8, 12, 13: independientes entre sí, pueden ir a la vez tras la 01.
 - Spec 20 (IoT) se implementa sobre `McpClientAdapter` apuntando al MCP Server de Home Assistant (decisión 2026-09-29, ver `AGENT.md`).
 

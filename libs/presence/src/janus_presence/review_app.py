@@ -133,6 +133,8 @@ class ReviewBackend(Protocol):
 
     def set_role(self, person_id: str, role: str) -> None: ...
 
+    def roles(self) -> tuple[str, ...]: ...
+
     def confirm_evidence(self, evidence_id: str) -> None: ...
 
     def reject_evidence(self, evidence_id: str) -> None: ...
@@ -466,6 +468,7 @@ class ReviewApp:
             session.csrf,
             flash,
             self._backend.match_thresholds(),
+            self._backend.roles(),
         )
         return _page(200, markup)
 
@@ -514,7 +517,7 @@ class ReviewApp:
     def _role(self, fields: Mapping[str, str]) -> str:
         person_id = _valid_id(fields.get("person_id"))
         role = _valid_role(fields.get("role"))
-        if person_id is None or role is None:
+        if person_id is None or role is None or role not in self._backend.roles():
             return "invalid"
         return self._run(
             "set_role",

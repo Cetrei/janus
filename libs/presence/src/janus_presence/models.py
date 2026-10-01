@@ -236,6 +236,10 @@ class CameraConfig:
     source: CameraSourceKind = CameraSourceKind.LOCAL
 
 
+# requisito 25: the role vocabulary used when the config does not declare one.
+DEFAULT_ROLES: tuple[str, ...] = ("owner", "family", "guest", "staff")
+
+
 @dataclass
 class PresenceConfig:
     """Config knobs from the spec's `Config presence` block plus the
@@ -254,7 +258,7 @@ class PresenceConfig:
     decision_model_confidence_threshold: float = 0.85
     cameras: list[CameraConfig] = field(default_factory=list)
     sources: list[SourceConfig] = field(default_factory=list)
-    roles: list[str] = field(default_factory=lambda: ["owner", "family", "guest", "staff"])
+    roles: list[str] = field(default_factory=lambda: list(DEFAULT_ROLES))
     established_min_samples: int = 5
     provisional_confidence_cap: float = 0.7
     auto_reinforce_dual_modality: bool = False

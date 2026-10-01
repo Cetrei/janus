@@ -89,6 +89,11 @@ class ServiceReviewBackend:
         with self._lock:
             self._service.set_role(person_id, role)
 
+    def roles(self) -> tuple[str, ...]:
+        """The role vocabulary from config. It never changes while running, so
+        showing it does not take the service lock."""
+        return self._service.roles()
+
     def confirm_evidence(self, evidence_id: str) -> None:
         with self._lock:
             self._service.confirm_evidence(evidence_id)

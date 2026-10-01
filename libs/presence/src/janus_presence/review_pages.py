@@ -304,7 +304,7 @@ details.more summary { cursor: pointer; color: var(--brand-fg); font-weight: 500
 .badge-success { color: var(--status-success); background: var(--success-soft); }
 .badge-error { color: var(--status-error); background: var(--error-soft); }
 .badge-warning { color: var(--status-warning); background: var(--warning-soft); }
-.btn, input[type=text], input[type=password], input[type=number] { font-family: inherit;
+.btn, input[type=text], input[type=password], input[type=number], select { font-family: inherit;
   font-size: var(--text-base); line-height: 1.2; min-height: 36px;
   border-radius: var(--radius-sm); }
 .btn { padding: var(--space-2) var(--space-4); font-weight: 500; cursor: pointer;
@@ -323,21 +323,21 @@ details.more summary { cursor: pointer; color: var(--brand-fg); font-weight: 500
 .btn-primary[disabled]:hover { background: var(--brand-solid); }
 .btn-secondary[disabled]:hover { background: var(--bg-raised);
   border-color: var(--border-strong); }
-input[type=text], input[type=password], input[type=number] {
+input[type=text], input[type=password], input[type=number], select {
   padding: var(--space-2) var(--space-3);
   background: var(--bg-primary); color: var(--text-primary);
   border: 1px solid var(--border-strong);
   transition: border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out); }
 input[type=number] { width: 8rem; }
-input[type=text]:focus, input[type=password]:focus, input[type=number]:focus {
+input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, select:focus {
   outline: none; border-color: var(--brand-primary); box-shadow: 0 0 0 3px var(--brand-soft); }
 .btn:focus-visible, summary:focus-visible { outline: 2px solid var(--brand-primary);
   outline-offset: 2px; }
 .bad { color: var(--status-error); }
 @keyframes rise { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
 @media (pointer: coarse) {
-  .btn, input[type=text], input[type=password], input[type=number] { min-height: 44px; }
+  .btn, input[type=text], input[type=password], input[type=number], select { min-height: 44px; }
 }
 @media (max-width: 640px) {
   .person { grid-template-columns: 1fr; }
@@ -514,20 +514,34 @@ def _name_form(group: PersonGroup, csrf: str) -> str:
     )
 
 
-def _role_form(group: PersonGroup, csrf: str) -> str:
+def _role_options(current: str | None, roles: tuple[str, ...]) -> str:
+    """The vocabulary as <option>s. A role the person already has that is no
+    longer in the config stays selectable, so opening the page never silently
+    changes it."""
+    choices = list(roles)
+    if current and current not in choices:
+        choices.append(current)
+    placeholder = "" if current else '<option value="" selected disabled>Elegir rol</option>'
+    options = "".join(
+        f'<option value="{_e(role)}"{" selected" if role == current else ""}>{_e(role)}</option>'
+        for role in choices
+    )
+    return placeholder + options
+
+
+def _role_form(group: PersonGroup, csrf: str, roles: tuple[str, ...]) -> str:
     """Only for a named person: the role is what a Home Assistant automation
-    matches, and it means nothing for someone nobody has named yet."""
-    if not group.label:
+    matches, and it means nothing for someone nobody has named yet. The choices
+    are the config's vocabulary (requisito 48), so a typo cannot be saved."""
+    if not group.label or not roles:
         return ""
     return (
         '<form method="post" action="/role" class="inline name-form" data-async>'
         f'<input type="hidden" name="csrf" value="{_e(csrf)}">'
         f'<input type="hidden" name="person_id" value="{_e(group.person_id)}">'
         f'<input type="hidden" name="back" value="{_e(group.person_id)}">'
-        '<label>Rol <input type="text" name="role" maxlength="32" required '
-        'pattern="[A-Za-z][A-Za-z0-9_\\-]*" placeholder="owner" autocomplete="off" '
-        f'value="{_e(group.role or "")}"></label>'
-        '<button type="submit" class="btn btn-secondary">Guardar rol</button></form>'
+        f'<label>Rol <select name="role" required>{_role_options(group.role, roles)}</select>'
+        '</label><button type="submit" class="btn btn-secondary">Guardar rol</button></form>'
     )
 
 
@@ -661,7 +675,7 @@ def _person_badges(group: PersonGroup) -> str:
     return badges
 
 
-def _person_section(group: PersonGroup, csrf: str) -> str:
+def _person_section(group: PersonGroup, csrf: str, roles: tuple[str, ...]) -> str:
     title = group.label or "Persona sin nombre"
     short_id = group.person_id[:_SHORT_ID_CHARS]
     hint = ""
@@ -672,7 +686,8 @@ def _person_section(group: PersonGroup, csrf: str) -> str:
         f'<div class="person-head"><h3>{_e(title)}</h3>{_person_badges(group)}</div>'
         f'<p class="muted">Vista por primera vez {_e(_when(group.first_seen_at))}, '
         f"por última vez {_e(_when(group.last_seen_at))} · id {_e(short_id)}</p>"
-        f"{_name_form(group, csrf)}{_role_form(group, csrf)}{hint}{_merge_prompt(group, csrf)}"
+        f"{_name_form(group, csrf)}{_role_form(group, csrf, roles)}{hint}"
+        f"{_merge_prompt(group, csrf)}"
         f'<h4>Pendiente de revisión <span class="count">{len(group.evidence)}</span></h4>'
         f"{_evidence_list(group, csrf)}{_bulk_bar(group, csrf)}</div></section>"
     )
@@ -694,10 +709,10 @@ def _banner(flash_code: str | None) -> str:
     return f'<p class="card {css}" role="status">{_e(flash)}</p>'
 
 
-def _people_section(groups: list[PersonGroup], csrf: str) -> str:
+def _people_section(groups: list[PersonGroup], csrf: str, roles: tuple[str, ...]) -> str:
     if not groups:
         return '<section><p class="muted">No hay nada pendiente de revisión.</p></section>'
-    return _ACTION_LEGEND + "".join(_person_section(group, csrf) for group in groups)
+    return _ACTION_LEGEND + "".join(_person_section(group, csrf, roles) for group in groups)
 
 
 def _settings_section(csrf: str, thresholds: tuple[float, float] | None) -> str:
@@ -728,13 +743,14 @@ def review_page(
     csrf: str,
     flash_code: str | None = None,
     thresholds: tuple[float, float] | None = None,
+    roles: tuple[str, ...] = (),
 ) -> str:
     logout = _post_form("/logout", csrf, {}, "Salir", variant="ghost")
     body = (
         f'<header class="topbar"><div><h1>Janus Presence</h1>{_summary(groups)}</div>'
         f"{logout}</header>"
         f"{_banner(flash_code)}{_sources_section(sources)}{_live_section(sources)}"
-        f"<h2>Revisión pendiente</h2>{_people_section(groups, csrf)}"
+        f"<h2>Revisión pendiente</h2>{_people_section(groups, csrf, roles)}"
         f"{_settings_section(csrf, thresholds)}"
     )
     return _layout("Janus Presence: revisión", body, with_script=True)

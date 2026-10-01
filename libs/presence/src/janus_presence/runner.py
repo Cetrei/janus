@@ -166,6 +166,7 @@ def _build_service(
         forget_after_days=presence.forget_after_days,
         max_samples_per_person=presence.max_samples_per_person,
         clip_recorder=recorder,
+        roles=presence.roles,
     )
 
 

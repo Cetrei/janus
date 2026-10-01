@@ -1,0 +1,11 @@
+state_dir = "~/.local/share/janus-camtest"
+
+[presence]
+match_threshold = 1.3
+match_threshold_ambiguous = 1.6
+
+[[sources]]
+source_id = "cuarto"
+kind = "camera"
+device = 3
+sample_fps = 1

@@ -1,0 +1,27 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  # spec-01 fixes the wire names (/janus_proto.v1.SpokeGateway/Register ...) and
+  # reuses shared messages across RPCs (SemanticRequest, TaskSpec, Empty ...).
+  # STANDARD would force a "Service" suffix and one Request/Response pair per
+  # RPC, so these four rules are relaxed for the two files that hold services.
+  # Everything else, including enum and field rules, stays enforced there.
+  ignore_only:
+    SERVICE_SUFFIX:
+      - janus_proto/v1/spoke.proto
+      - janus_proto/v1/gateway.proto
+    RPC_REQUEST_STANDARD_NAME:
+      - janus_proto/v1/spoke.proto
+      - janus_proto/v1/gateway.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - janus_proto/v1/spoke.proto
+      - janus_proto/v1/gateway.proto
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - janus_proto/v1/spoke.proto
+      - janus_proto/v1/gateway.proto
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,15 @@
+# Generated code is committed (spec-01 requirement 9), so no `clean: true`:
+# the hand written files under libs/proto-py/src/janus_proto/ must survive.
+#
+# Remote plugin versions are pinned and form one compatible set:
+#   protobuf gencode v28.3  ->  runtime protobuf >=5.28.3,<6
+#   grpc/python v1.67.1     ->  runtime grpcio >=1.67.1
+# Bump all three together with libs/proto-py/pyproject.toml.
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/python:v28.3
+    out: ../libs/proto-py/src
+  - remote: buf.build/protocolbuffers/pyi:v28.3
+    out: ../libs/proto-py/src
+  - remote: buf.build/grpc/python:v1.67.1
+    out: ../libs/proto-py/src

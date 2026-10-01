@@ -94,3 +94,88 @@ Ctrl+C o SIGTERM cierran en orden (página, cámaras, jobs, base de datos).
 Códigos de salida: `0` parada limpia, `1` no pudo arrancar o se detuvo por
 un error corregible (clave o modelo ausente, puerto ocupado), `2` config o
 argumentos inválidos. `--log-level debug|info|warning|error` ajusta el log.
+
+## Quién entró y salió
+
+El runner escribe una línea `visit_started` y otra `visit_ended` por visita en
+`<state_dir>/presence/events.jsonl` (la estancia viene en `dwell_s`). El
+subcomando `visits` las junta y las lista; funciona con el runner corriendo o
+detenido y lee también el respaldo `events.jsonl.1`.
+
+```bash
+uv run python -m janus_presence visits --config presence.toml
+uv run python -m janus_presence visits --config presence.toml --since 24h
+uv run python -m janus_presence visits --config presence.toml --last 10 --json
+```
+
+`--since` acepta `90m`, `12h` o `7d`; `--last N` deja las N más recientes;
+`--json` imprime un arreglo para usarlo desde un script. Los nombres salen de
+la base de datos de presence (solo lectura); si no se pueden leer, se muestra
+el id corto de la persona. Una visita sin hora de salida aparece como
+`en curso`.
+
+Una sola cámara solo sabe que alguien apareció y que dejó de verse: no
+distingue entrar de salir. Para saber la dirección haría falta una segunda
+cámara o un sensor de puerta.
+
+## Home Assistant: luz al llegar
+
+Si `presence.toml` tiene la sección `[home_assistant]`, el runner avisa a Home
+Assistant en cada visita que se abre o se cierra con
+`POST /api/events/janus_presence`. Home Assistant decide qué hacer; presence
+solo dice a quién vio.
+
+1. En tu perfil de Home Assistant crea un token de acceso de larga duración y
+   guárdalo en `~/.config/janus/ha.token` con `chmod 600`. El runner se niega
+   a arrancar si el archivo no existe, está vacío o lo pueden leer otros
+   usuarios.
+2. Agrega a `presence.toml`:
+
+```toml
+[home_assistant]
+url = "http://127.0.0.1:8123"
+token_file = "~/.config/janus/ha.token"
+```
+
+3. Crea una automatización en Home Assistant que escuche el evento. Este
+   ejemplo enciende la luz cuando llega una persona con el nombre que le
+   pusiste en la página de revisión (aquí `Joanfer`), después del atardecer:
+
+```yaml
+alias: Luz al llegar
+trigger:
+  - platform: event
+    event_type: janus_presence
+    event_data:
+      kind: visit_started
+      label: Joanfer
+condition:
+  - condition: sun
+    after: sunset
+action:
+  - service: light.turn_on
+    target:
+      entity_id: light.bombillo
+```
+
+Datos del evento: `kind` (`visit_started` o `visit_ended`), `visit_id`,
+`person_id`, `label`, `role`, `state`, `source_id`, `started_at`,
+`last_seen_at`, `at` y `dwell_s` (solo al cerrar). `label` y `role` son `null`
+para quien sigue sin nombre, así que una condición sobre `label` nunca se
+cumple con un desconocido. Agrega `state: established` al `event_data` si
+quieres exigir que la persona ya tenga varias confirmaciones tuyas; con
+`provisional` basta un nombre. El rol (`role`) se asigna desde la página de
+revisión con el campo "Rol" de cada persona con nombre (una palabra en
+minúsculas, como `owner` o `family`); aparece como `role` en el evento y
+puedes usarlo en lugar de `label` en `event_data`. El campo solo está en las
+tarjetas de personas que todavía tienen apariciones por revisar, así que ponlo
+antes de confirmar las suficientes para que la persona quede establecida.
+
+Si Home Assistant está caído, el evento se reintenta unas veces y luego se
+descarta con una advertencia; ver gente nunca espera a Home Assistant.
+
+**Seguridad.** El evento de presencia no debe encadenarse a cerraduras ni a
+alarmas: reconocer una cara no autoriza nada. Usa este evento solo para luces,
+clima y medios. Los umbrales de coincidencia deciden a quién se le prende la
+luz: ajústalos desde la página de revisión con tu cámara real antes de
+confiar en la automatización.

@@ -1,0 +1,223 @@
+syntax = "proto3";
+
+package janus_proto.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "janus_proto/v1/capability.proto";
+import "janus_proto/v1/channel.proto";
+import "janus_proto/v1/semantic.proto";
+import "janus_proto/v1/session.proto";
+import "janus_proto/v1/spoke.proto";
+import "janus_proto/v1/task.proto";
+
+// Implemented by apps/core-gateway. Tokens travel in gRPC metadata
+// (`authorization`), never in messages. Scopes are enforced by spec 05 and
+// spec 11; each RPC below documents the one it requires.
+
+// Spoke to core. Auth: token with scope registry:register or
+// capability:invoke, as noted per RPC.
+service SpokeGateway {
+  // Scope: registry:register.
+  rpc Register(SpokeRegistration) returns (RegisterAck);
+  // Scope: registry:register.
+  rpc Heartbeat(HeartbeatRequest) returns (HealthAck);
+  // Scope: registry:register.
+  rpc Unregister(UnregisterRequest) returns (google.protobuf.Empty);
+  // Spoke asking the core for a capability. Scope: capability:invoke.
+  rpc RequestCapability(SemanticRequest) returns (stream SemanticEvent);
+}
+
+// channel-gateway to core. Auth: internal channel-gateway token.
+service ChannelBridge {
+  rpc Stream(stream ChannelUp) returns (stream ChannelDown);
+}
+
+// Administrative operations. Scope: control:write on every RPC.
+service Control {
+  rpc CreateTask(TaskSpec) returns (Task);
+  rpc CancelTask(TaskRef) returns (Task);
+  rpc PauseTask(TaskRef) returns (Task);
+  rpc ResumeTask(TaskRef) returns (Task);
+  rpc AssignRole(AssignRoleRequest) returns (google.protobuf.Empty);
+  rpc CreateSession(CreateSessionRequest) returns (Session);
+  rpc SubscribeSession(SubscribeRequest) returns (Session);
+  rpc UnsubscribeSession(SubscribeRequest) returns (Session);
+  rpc SetPreference(SetPreferenceRequest) returns (google.protobuf.Empty);
+  // Spec 17.
+  rpc SetSpokeAvailability(SetSpokeAvailabilityRequest) returns (google.protobuf.Empty);
+  rpc RegisterSpoke(SpokeRegistration) returns (RegisterAck);
+  rpc RetireSpoke(UnregisterRequest) returns (google.protobuf.Empty);
+}
+
+// Read only state. Scope: observe:read on every RPC.
+service Observe {
+  rpc GetRegistry(google.protobuf.Empty) returns (RegistrySnapshot);
+  rpc ListSessions(ListRequest) returns (SessionList);
+  rpc ListTasks(ListRequest) returns (TaskList);
+  rpc ListAgents(google.protobuf.Empty) returns (AgentList);
+  rpc GetPreferences(google.protobuf.Empty) returns (PreferenceSet);
+  // Push events of architecture/07 section 3.
+  rpc Watch(WatchRequest) returns (stream StateEvent);
+}
+
+// SpokeGateway messages.
+
+message RegisterAck {
+  string spoke_id = 1;
+  // How often the spoke must call Heartbeat.
+  google.protobuf.Duration heartbeat_interval = 2;
+}
+
+message HeartbeatRequest {
+  string spoke_id = 1;
+  HealthReport report = 2;
+}
+
+message HealthAck {
+  google.protobuf.Timestamp received_at = 1;
+}
+
+message UnregisterRequest {
+  string spoke_id = 1;
+}
+
+// ChannelBridge messages.
+
+message ChannelHello {
+  string gateway_id = 1;
+  repeated string platforms = 2;
+}
+
+message ChannelAck {
+  string event_id = 1;
+}
+
+message ChannelUp {
+  oneof kind {
+    ChannelHello hello = 1;
+    InboundEvent inbound = 2;
+    DeliveryReceipt receipt = 3;
+  }
+}
+
+message ChannelDown {
+  oneof kind {
+    OutboundMessage outbound = 1;
+    ChannelAck ack = 2;
+  }
+}
+
+// Control messages.
+
+message TaskRef {
+  string task_id = 1;
+}
+
+message AssignRoleRequest {
+  string role = 1;
+  string spoke_id = 2;
+}
+
+message CreateSessionRequest {
+  SessionKind kind = 1;
+  string agent_name = 2;
+  optional string task_id = 3;
+}
+
+message SubscribeRequest {
+  string session_id = 1;
+  string participant_id = 2;
+  string channel_ref = 3;
+}
+
+message SetPreferenceRequest {
+  string key = 1;
+  google.protobuf.Value value = 2;
+}
+
+enum AvailabilityMode {
+  AVAILABILITY_MODE_UNSPECIFIED = 0;
+  AVAILABILITY_MODE_AUTO = 1;
+  AVAILABILITY_MODE_UNAVAILABLE_UNTIL = 2;
+  AVAILABILITY_MODE_UNAVAILABLE_INDEFINITE = 3;
+}
+
+message SetSpokeAvailabilityRequest {
+  string spoke_id = 1;
+  AvailabilityMode mode = 2;
+  // Only meaningful with AVAILABILITY_MODE_UNAVAILABLE_UNTIL.
+  optional google.protobuf.Timestamp until = 3;
+  string reason = 4;
+}
+
+// Observe messages.
+
+message ListRequest {
+  uint32 page_size = 1;
+  string page_token = 2;
+}
+
+message RegistrySnapshot {
+  repeated SpokeRegistration spokes = 1;
+  // role -> spoke_id.
+  map<string, string> role_assignments = 2;
+}
+
+message SessionList {
+  repeated Session sessions = 1;
+  string next_page_token = 2;
+}
+
+message TaskList {
+  repeated Task tasks = 1;
+  string next_page_token = 2;
+}
+
+message AgentInfo {
+  string agent_name = 1;
+  string role = 2;
+  optional string spoke_id = 3;
+}
+
+message AgentList {
+  repeated AgentInfo agents = 1;
+}
+
+message PreferenceSet {
+  map<string, google.protobuf.Value> preferences = 1;
+}
+
+// Reserved for filters; an empty request watches everything.
+message WatchRequest {}
+
+enum CapabilityChangeKind {
+  CAPABILITY_CHANGE_KIND_UNSPECIFIED = 0;
+  CAPABILITY_CHANGE_KIND_ADDED = 1;
+  CAPABILITY_CHANGE_KIND_UPDATED = 2;
+  CAPABILITY_CHANGE_KIND_REMOVED = 3;
+}
+
+message CapabilityChange {
+  string spoke_id = 1;
+  CapabilityChangeKind kind = 2;
+  CapabilityDescriptor capability = 3;
+}
+
+// A health report is meaningless without the spoke it belongs to.
+message SpokeHealthChange {
+  string spoke_id = 1;
+  HealthReport report = 2;
+}
+
+message StateEvent {
+  oneof change {
+    Task task = 1;
+    Session session = 2;
+    SpokeRegistration spoke = 3;
+    SpokeHealthChange health = 4;
+    CapabilityChange capability = 5;
+  }
+}

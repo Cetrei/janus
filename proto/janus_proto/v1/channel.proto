@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package janus_proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "janus_proto/v1/common.proto";
+
+// UNTRUSTED DATA. Everything in this message comes from an external platform
+// and is never verified. It must never authorize anything: no permission,
+// role or identity decision may be based on it.
+message UntrustedSender {
+  string platform_user_id = 1;
+  string display_name = 2;
+  map<string, string> attributes = 3;
+}
+
+message InboundEvent {
+  string event_id = 1;
+  string platform = 2;
+  string channel_id = 3;
+  string account_id = 4;
+  UntrustedSender sender = 5;
+  Payload content = 6;
+  google.protobuf.Timestamp received_at = 7;
+  map<string, string> metadata = 8;
+}
+
+enum IdentityMode {
+  IDENTITY_MODE_UNSPECIFIED = 0;
+  IDENTITY_MODE_JANUS = 1;
+  IDENTITY_MODE_OWN_BOT = 2;
+  IDENTITY_MODE_SHARED_WITH_PREFIX = 3;
+}
+
+message SpeakerIdentity {
+  IdentityMode mode = 1;
+  string agent_name = 2;
+  string display_prefix = 3;
+  string bot_account_id = 4;
+}
+
+message OutboundMessage {
+  string message_id = 1;
+  string platform = 2;
+  string channel_id = 3;
+  string account_id = 4;
+  Payload content = 5;
+  SpeakerIdentity speaker = 6;
+  optional string reply_to_event_id = 7;
+}
+
+message DeliveryReceipt {
+  string message_id = 1;
+  bool delivered = 2;
+  optional ErrorInfo error = 3;
+}

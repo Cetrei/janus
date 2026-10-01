@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package janus_proto.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "janus_proto/v1/capability.proto";
+import "janus_proto/v1/semantic.proto";
+
+enum SpokeKind {
+  SPOKE_KIND_UNSPECIFIED = 0;
+  SPOKE_KIND_REASONING = 1;
+  SPOKE_KIND_EXECUTION = 2;
+  SPOKE_KIND_CHANNEL = 3;
+}
+
+enum HealthState {
+  HEALTH_STATE_UNSPECIFIED = 0;
+  HEALTH_STATE_HEALTHY = 1;
+  HEALTH_STATE_DEGRADED = 2;
+  HEALTH_STATE_UNAVAILABLE = 3;
+}
+
+message HealthReport {
+  HealthState state = 1;
+  google.protobuf.Timestamp checked_at = 2;
+  optional string reason = 3;
+  optional google.protobuf.Timestamp retry_after = 4;
+  bool requires_user_action = 5;
+  map<string, string> details = 6;
+}
+
+message SpokeRegistration {
+  string spoke_id = 1;
+  string display_name = 2;
+  repeated SpokeKind kinds = 3;
+  repeated CapabilityDescriptor capabilities = 4;
+  // host:port of the SpokeEndpoint.
+  string endpoint = 5;
+  map<string, string> labels = 6;
+}
+
+// Implemented by a native spoke that speaks gRPC. The core calls it.
+service SpokeEndpoint {
+  rpc Invoke(SemanticRequest) returns (stream SemanticEvent);
+  rpc Health(google.protobuf.Empty) returns (HealthReport);
+}

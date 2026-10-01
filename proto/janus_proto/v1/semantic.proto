@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package janus_proto.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "janus_proto/v1/common.proto";
+
+// Semantic request/response/event model shared by the core and every spoke.
+// Field numbers are part of the contract: never reuse, never renumber.
+
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  EVENT_KIND_PROGRESS = 1;
+  EVENT_KIND_PARTIAL = 2;
+  EVENT_KIND_TERMINAL = 3;
+}
+
+enum ResponseStatus {
+  RESPONSE_STATUS_UNSPECIFIED = 0;
+  RESPONSE_STATUS_SUCCEEDED = 1;
+  RESPONSE_STATUS_FAILED = 2;
+}
+
+message SemanticRequest {
+  string request_id = 1;
+  // Abstract id matching ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ . Never
+  // contains a spoke name.
+  string capability_id = 2;
+  string session_id = 3;
+  optional string task_id = 4;
+  optional string role = 5;
+  Payload input = 6;
+  map<string, string> metadata = 7;
+  google.protobuf.Duration deadline = 8;
+  // spoke_ids already visited. Written only by the core; an adapter that
+  // alters it triggers SpokeProtocolError in libs/adapters.
+  repeated string route_trace = 9;
+  // spoke_id, "user" or "core". Written only by the core; same rule as
+  // `route_trace`.
+  string requester_id = 10;
+  // Binary attachments such as screenshots. Adapters that do not use them
+  // ignore them.
+  repeated Payload attachments = 11;
+}
+
+message SemanticResponse {
+  ResponseStatus status = 1;
+  Payload output = 2;
+  repeated Artifact artifacts = 3;
+  optional string suggested_next_step = 4;
+  // Logical failure. Transport failures use gRPC status codes instead.
+  optional ErrorInfo error = 5;
+}
+
+message SemanticEvent {
+  string request_id = 1;
+  uint64 seq = 2;
+  EventKind kind = 3;
+  string session_id = 4;
+  optional string task_id = 5;
+  optional string role = 6;
+  // Set for PROGRESS and PARTIAL events.
+  Payload delta = 7;
+  // Set only for TERMINAL events. A TERMINAL event without it is invalid.
+  optional SemanticResponse response = 8;
+  google.protobuf.Timestamp at = 9;
+}

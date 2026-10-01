@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package janus_proto.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+
+enum CachePolicyKind {
+  CACHE_POLICY_KIND_UNSPECIFIED = 0;
+  CACHE_POLICY_KIND_NONE = 1;
+  CACHE_POLICY_KIND_TTL = 2;
+}
+
+message CachePolicy {
+  // UNSPECIFIED is treated as NONE.
+  CachePolicyKind kind = 1;
+  // Only meaningful when kind is TTL.
+  google.protobuf.Duration ttl = 2;
+}
+
+message CapabilityDescriptor {
+  // Abstract id matching ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ . Never
+  // contains a spoke name.
+  string capability_id = 1;
+  string version = 2;
+  string description = 3;
+  repeated string input_content_types = 4;
+  repeated string output_content_types = 5;
+  // Optional JSON Schema.
+  google.protobuf.Struct input_schema = 6;
+  google.protobuf.Struct output_schema = 7;
+  // Defaults to NONE when unset.
+  CachePolicy cache_policy = 8;
+  // Defaults to false. libs/capabilities retries after a failure with
+  // possible side effects only when this is true.
+  bool idempotent = 9;
+  map<string, string> labels = 10;
+}

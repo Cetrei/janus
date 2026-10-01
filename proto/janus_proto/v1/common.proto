@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package janus_proto.v1;
+
+import "google/protobuf/struct.proto";
+
+// Shared building blocks used by every other file in this package.
+// Field numbers are part of the contract: never reuse, never renumber.
+
+// Payload carries one piece of content. An unset `kind` is valid and means
+// an empty payload; consumers must handle it instead of assuming text.
+message Payload {
+  oneof kind {
+    string text = 1;
+    google.protobuf.Struct json = 2;
+    bytes binary = 3;
+  }
+  // MIME type. Defaults to text/plain or application/json by `kind`.
+  string content_type = 4;
+}
+
+message Artifact {
+  string artifact_id = 1;
+  string kind = 2;
+  string uri = 3;
+  string content_type = 4;
+  uint64 size_bytes = 5;
+  string sha256 = 6;
+  map<string, string> labels = 7;
+}
+
+message ErrorInfo {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  // True when the failed operation may already have changed external state.
+  // Retrying a non idempotent capability is unsafe when this is set.
+  bool side_effects_possible = 4;
+  map<string, string> details = 5;
+}

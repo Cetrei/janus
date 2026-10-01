@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package janus_proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "janus_proto/v1/common.proto";
+import "janus_proto/v1/semantic.proto";
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_RUNNING = 2;
+  TASK_STATUS_BLOCKED = 3;
+  TASK_STATUS_COMPLETED = 4;
+  TASK_STATUS_FAILED = 5;
+  TASK_STATUS_CANCELLED = 6;
+}
+
+// Sub item of a task. Not a task of its own and not part of task_deps.
+// `done_at` set while `done` is false is invalid; core-gateway rejects it.
+message TaskChecklistItem {
+  string item_id = 1;
+  string label = 2;
+  bool done = 3;
+  optional google.protobuf.Timestamp done_at = 4;
+}
+
+// What to do when a dependency fails is not a field: Janus decides it at
+// runtime (spec 11, requirement 20).
+message TaskSpec {
+  string title = 1;
+  string role = 2;
+  string session_id = 3;
+  repeated string depends_on = 4;
+  Payload input = 5;
+  map<string, string> labels = 6;
+  // Ticked by the subagent through a tool; does not wake a Janus turn.
+  repeated TaskChecklistItem checklist = 7;
+  // Notify Janus on completion even without dependents in task_deps
+  // (spec 11, requirement 22bis).
+  bool required = 8;
+}
+
+message Task {
+  string task_id = 1;
+  TaskSpec spec = 2;
+  TaskStatus status = 3;
+  optional string assigned_spoke_id = 4;
+  google.protobuf.Timestamp created_at = 5;
+  optional google.protobuf.Timestamp started_at = 6;
+  optional google.protobuf.Timestamp finished_at = 7;
+  optional SemanticResponse result = 8;
+  optional string status_reason = 9;
+  uint32 attempts = 10;
+}

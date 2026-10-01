@@ -22,7 +22,7 @@ Alcance: mensajes, enums, servicios y tooling de generación. No incluye lógica
 ## Functional Requirements
 
 ### Layout y tooling
-1. Existe `proto/buf.yaml` (versión v2) con módulo único, lint `STANDARD` y breaking `FILE`.
+1. Existe `proto/buf.yaml` (versión v2) con módulo único, lint `STANDARD` y breaking `FILE`. Decisión 2026-09-30 (Architect): `spoke.proto` y `gateway.proto` quedan exentos de cuatro reglas de lint (`SERVICE_SUFFIX`, `RPC_REQUEST_STANDARD_NAME`, `RPC_RESPONSE_STANDARD_NAME`, `RPC_REQUEST_RESPONSE_UNIQUE`) vía `ignore_only`, porque los nombres de servicio y los mensajes compartidos entre RPCs son parte del contrato ya fijado. El resto de reglas sigue activo en esos archivos.
 2. Existe `proto/buf.gen.yaml` que genera hacia `libs/proto-py/src/`. TypeScript se agrega cuando la spec 14 lo requiera (`packages/proto-ts/`).
 3. Los `.proto` viven en `proto/janus_proto/v1/` con estos archivos: `common.proto`, `semantic.proto`, `capability.proto`, `task.proto`, `session.proto`, `channel.proto`, `spoke.proto`, `gateway.proto`. (`stack/02` nombraba tres; los otros cinco son una extensión documentada aquí.)
 4. El paquete proto es `janus_proto.v1`. Un cambio incompatible exige un paquete `janus_proto.v2`, nunca editar `v1` en sitio.
@@ -278,7 +278,7 @@ service Observe {                            // Auth: scope observe:read
 }
 ```
 
-Reglas para los mensajes auxiliares no listados (`RegisterAck`, `TaskRef`, `ListRequest`, `StateEvent`, etc.): un mensaje por RPC con sufijo `Request` y `Response` salvo los reutilizados arriba; `ListRequest` lleva `page_size` y `page_token`; `StateEvent` lleva `oneof` de `Task`, `Session`, `SpokeRegistration`, `HealthReport` y `CapabilityChange`. `SetSpokeAvailabilityRequest` lleva `spoke_id`, `mode` (`AVAILABILITY_MODE_AUTO`, `AVAILABILITY_MODE_UNAVAILABLE_UNTIL`, `AVAILABILITY_MODE_UNAVAILABLE_INDEFINITE`), `until` opcional y `reason` (spec 17). `SemanticRequest.attachments` no altera el contrato de los adaptadores existentes: un adaptador que no las use las ignora. El implementador los completa siguiendo estas reglas y las reglas de lint.
+Reglas para los mensajes auxiliares no listados (`RegisterAck`, `TaskRef`, `ListRequest`, `StateEvent`, etc.): un mensaje por RPC con sufijo `Request` y `Response` salvo los reutilizados arriba; `ListRequest` lleva `page_size` y `page_token`; `StateEvent` lleva `oneof` de `Task`, `Session`, `SpokeRegistration`, `SpokeHealthChange` (`spoke_id` más `HealthReport`, porque un reporte de salud sin su spoke no sirve) y `CapabilityChange`. `SetSpokeAvailabilityRequest` lleva `spoke_id`, `mode` (`AVAILABILITY_MODE_AUTO`, `AVAILABILITY_MODE_UNAVAILABLE_UNTIL`, `AVAILABILITY_MODE_UNAVAILABLE_INDEFINITE`), `until` opcional y `reason` (spec 17). `SemanticRequest.attachments` no altera el contrato de los adaptadores existentes: un adaptador que no las use las ignora. El implementador los completa siguiendo estas reglas y las reglas de lint.
 
 Errores gRPC: `UNAUTHENTICATED` (token ausente o inválido), `PERMISSION_DENIED` (scope insuficiente), `NOT_FOUND`, `FAILED_PRECONDITION` (estado inválido), `RESOURCE_EXHAUSTED` (cola o cuota), `UNAVAILABLE` (proveedor no disponible), `INVALID_ARGUMENT`.
 

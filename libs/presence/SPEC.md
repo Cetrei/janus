@@ -364,5 +364,29 @@ Unitarios: migraciones sobre una base vacía y sobre una creada por la versión 
 - [ ] Cifrado en reposo de los clips crudos (hoy solo permisos 0600 y aviso en el README; el spec original solo exige cifrar snapshots).
 - [ ] Cadencia de muestreo (`sample_fps`) por tipo de fuente.
 
+## Ampliación 2026-09-30: Home Loop (hito M1, sin núcleo de Janus)
+
+> **Estado**: decidida por el Architect con delegación explícita del usuario. Concreta la fase F4 y la separa de F5. Objetivo del hito: una primera versión útil de casa inteligente, sin esperar al núcleo de Janus (specs 2 a 11).
+
+Caso de uso M1: (a) prender la luz al verme llegar, (b) registrar quién entra y sale, (c) comandos de voz para luces. Nada de esto requiere `libs/adapters` ni `apps/core-gateway`: Home Assistant (HA) ya ejecuta las acciones y ya tiene voz local (Assist, Wyoming); `presence` solo aporta el reconocimiento y emite eventos.
+
+40. No se crea un `EventSink` genérico (YAGNI): los callbacks `on_visit_started` y `on_visit_ended` del servicio ya son el mecanismo y `JsonlEventLog` ya es su primer consumidor. Cada consumidor nuevo se suscribe ahí y nunca debe bloquear `observe`: el servicio entrega los eventos con su lock tomado, así que un consumidor solo arma un mensaje pequeño, lo encola y hace el trabajo lento en otro hilo.
+41. Registro de entradas y salidas: ya existe (`JsonlEventLog`, `events.jsonl` con rotación, eventos `visit_started` y `visit_ended` con `dwell_s`). Lo que falta es el subcomando `python -m janus_presence visits` que lo lea y liste visitas con fuente, persona, inicio, fin y permanencia.
+42. `HomeAssistantSink` (`ha_sink.py`, implementado 2026-09-30, sin ejecutar): sección `[home_assistant]` del TOML (`url`, `token_file`, `timeout_s`, `queue_size`); `POST {url}/api/events/janus_presence` con `{kind, visit_id, person_id, label, role, state, source_id, started_at, last_seen_at, at, dwell_s}`. Hilo propio con cola acotada: reintentos con backoff (3 intentos), descarte con warn si HA no responde, descarta el evento más viejo si la cola se llena. Token leído desde `token_file` privado (0600), nunca del TOML ni de los logs. Solo stdlib. `http` hacia un host no loopback emite un warn. Para personas UNKNOWN, `label` y `role` van en `null`.
+43. Una sola cámara solo puede decir "apareció" y "dejó de verse". Inferir dirección (entró o salió) a partir del orden entre dos fuentes, o de un sensor de puerta de HA, queda fuera de M1. No se agrega `zone` a `SourceConfig`: `source_id` y `label` bastan para que HA distinga la cámara.
+44. Regla de seguridad del hito: un evento de `presence` es información, nunca autorización (requisito 25). Las automatizaciones de HA disparadas por `janus_presence` se limitan en M1 a luces, clima y medios. Prohibido encadenar cerraduras, alarma, portón o cualquier acción irreversible a este evento sin un segundo factor (la voz sola tampoco, spec-18 requisito 10). Se documenta en el README de `libs/presence` junto a una automatización de ejemplo (luz al llegar, con condiciones de sol o iluminancia).
+45. Calibración obligatoria antes de operar: `match_threshold` y `match_threshold_ambiguous` no tienen default (requisito 5) y ya son obligatorios en el TOML del runner; además se pueden ajustar desde la página de revisión, donde lo guardado gana sobre el TOML. Falta un asistente que proponga los valores a partir de las distancias entre muestras del dueño y de un impostor (hoy se eligen a mano). Hasta entonces, el dueño parte de los valores medidos en `libs/biometrics` y los ajusta mirando falsos positivos y negativos en la página de revisión.
+46. Voz en M1: comandos de voz por Assist de HA (local). La identificación de hablante de F3 queda disponible pero no entra en el camino crítico; `libs/voice` (spec 13) y el núcleo de Janus se retoman después de M1. Cuando exista Janus, el adaptador de F5 consume los mismos eventos y herramientas; los sinks siguen vigentes.
+
+### Orden de implementación de M1
+
+Estado real al 2026-09-30: el runner (`runner.py`, `runner_config.py`, `monitor.py`, `jobs.py`), el log JSONL (`event_log.py`), la página de revisión (`review_*.py`) y la activación por palabra clave ya existen. Falta lo siguiente.
+
+1. `ha_sink.py` y la sección `[home_assistant]`: escritos, pendientes de `pytest` (`tests/test_ha_sink.py`).
+2. Subcomando `visits` en `__main__.py`.
+3. Automatización de ejemplo de HA (luz al llegar, con condición de sol o iluminancia) y `README` de `libs/presence` con la regla del requisito 44.
+4. Asistente de calibración de umbrales (requisito 45), si los valores a mano no alcanzan.
+5. Aceptación por ejecución real del dueño: llegar frente a la cámara de la entrada enciende `light.bombillo` vía automatización de HA, y `events.jsonl` muestra la visita abierta y cerrada.
+
 ## Handoff Note
 Revisar esta spec y `hnsw-c/SPEC.md` antes de empezar (este documento depende de decisiones tomadas ahí, en particular la firma de `hnsw_index_search`/`insert`/`remove`). Crear un checklist desde los requisitos funcionales y marcarlo al avanzar. Levantar dudas antes de codificar, no durante. Orden sugerido: `store.py` y `models.py` primero (sin dependencias externas, fáciles de testear con datos falsos), luego `index.py` contra `hnsw-c` ya compilado, luego `frame_source.py` con `LocalCameraSource`, y `service.py` al final integrando todo. `decision_gate.py` y `McpCameraSource` son extensiones opcionales, se implementan después de que el flujo determinista completo funcione de punta a punta.

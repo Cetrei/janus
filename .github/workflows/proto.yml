@@ -1,0 +1,63 @@
+name: proto
+
+on:
+  pull_request:
+    paths:
+      - "proto/**"
+      - "libs/proto-py/**"
+      - ".github/workflows/proto.yml"
+  push:
+    branches: [master]
+    paths:
+      - "proto/**"
+      - "libs/proto-py/**"
+      - ".github/workflows/proto.yml"
+
+jobs:
+  buf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ github.token }}
+      - name: Lint
+        working-directory: proto
+        run: buf lint
+      - name: Check master has a proto module
+        id: baseline
+        run: |
+          if git cat-file -e origin/master:proto/buf.yaml 2>/dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Breaking changes
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.present == 'true'
+        working-directory: proto
+        run: buf breaking --against '../.git#branch=origin/master,subdir=proto'
+      - name: Regenerate and compare
+        working-directory: proto
+        run: |
+          buf generate
+          git diff --exit-code -- ../libs/proto-py/src
+          test -z "$(git ls-files --others --exclude-standard -- ../libs/proto-py/src)"
+
+  proto-py:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/proto-py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv sync
+      - name: Tests
+        run: uv run pytest
+      - name: Lint
+        run: uv run ruff check .
+      - name: Audit dependencies
+        run: uv run --with pip-audit pip-audit

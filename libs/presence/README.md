@@ -77,6 +77,7 @@ state_dir = "~/.local/share/janus"
 [presence]
 match_threshold = 0.6
 match_threshold_ambiguous = 1.2
+# roles = ["owner", "family", "guest", "staff"]   # opcional: vocabulario de roles
 
 [[sources]]
 source_id = "cuarto"
@@ -165,11 +166,14 @@ para quien sigue sin nombre, así que una condición sobre `label` nunca se
 cumple con un desconocido. Agrega `state: established` al `event_data` si
 quieres exigir que la persona ya tenga varias confirmaciones tuyas; con
 `provisional` basta un nombre. El rol (`role`) se asigna desde la página de
-revisión con el campo "Rol" de cada persona con nombre (una palabra en
-minúsculas, como `owner` o `family`); aparece como `role` en el evento y
-puedes usarlo en lugar de `label` en `event_data`. El campo solo está en las
-tarjetas de personas que todavía tienen apariciones por revisar, así que ponlo
-antes de confirmar las suficientes para que la persona quede establecida.
+revisión con la lista "Rol" de cada persona con nombre; las opciones salen de
+`roles` en la sección `[presence]` (por defecto `owner`, `family`, `guest` y
+`staff`) y un rol fuera de esa lista se rechaza, porque la automatización lo
+compara de forma exacta. Aparece como `role` en el evento y puedes usarlo en
+lugar de `label` en `event_data`. La lista solo está en las tarjetas de
+personas que todavía tienen apariciones por revisar, así que ponlo antes de
+confirmar las suficientes para que la persona quede establecida. El rol es una
+etiqueta: nunca autoriza nada.
 
 Si Home Assistant está caído, el evento se reintenta unas veces y luego se
 descarta con una advertencia; ver gente nunca espera a Home Assistant.

@@ -539,7 +539,9 @@ class TestPages:
     def test_confirming_is_enabled_for_a_named_person(self, harness, signed_in):
         harness.backend.groups = [make_group()]
 
-        assert " disabled" not in body_of(get(harness.app, "/", signed_in.cookie))
+        # The role select's placeholder option is also `disabled`, so the check
+        # looks at the buttons only (a disabled button carries a title).
+        assert '" disabled title=' not in body_of(get(harness.app, "/", signed_in.cookie))
 
     def test_values_from_the_database_are_escaped(self, harness, signed_in):
         group = make_group(label="<script>alert(1)</script>")

@@ -50,6 +50,12 @@ class EmptyBackend:
     def name_person(self, person_id: str, label: str) -> None:
         return None
 
+    def set_role(self, person_id: str, role: str) -> None:
+        return None
+
+    def roles(self) -> tuple[str, ...]:
+        return ("owner",)
+
     def confirm_evidence(self, evidence_id: str) -> None:
         return None
 
